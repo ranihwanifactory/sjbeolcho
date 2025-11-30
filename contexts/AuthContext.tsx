@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, googleProvider, ADMIN_EMAIL } from '../services/firebase';
 import { UserProfile, UserRole } from '../types.ts';
 
@@ -7,6 +7,8 @@ interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  signupWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -46,17 +48,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error("Login failed", error);
-      alert("로그인에 실패했습니다.");
+      console.error("Google Login failed", error);
+      throw error;
     }
   };
+
+  const loginWithEmail = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error) {
+        console.error("Email Login failed", error);
+        throw error;
+    }
+  }
+
+  const signupWithEmail = async (email: string, pass: string, name: string) => {
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(userCredential.user, {
+            displayName: name
+        });
+        // Force refresh user state or let onAuthStateChanged handle it
+    } catch (error) {
+        console.error("Signup failed", error);
+        throw error;
+    }
+  }
 
   const logout = async () => {
     await signOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signupWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

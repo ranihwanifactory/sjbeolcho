@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, limit } from 'firebase/firestore';
 import { ChatMessage, UserRole } from '../types.ts';
 import { Send, User as UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,7 @@ const Chat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [chatRooms, setChatRooms] = useState<any[]>([]); // For admin
+  const [chatUsers, setChatUsers] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,55 +29,40 @@ const Chat: React.FC = () => {
   // Admin: Fetch list of users who have chatted
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
-        const q = query(collection(db, 'chats'), orderBy('createdAt', 'desc'));
+        // Fetch recent chats to find unique users. 
+        // Note: For a scalable app, use a separate 'chat_rooms' collection.
+        // For this size, we query recent messages.
+        const q = query(collection(db, 'chats'), orderBy('createdAt', 'desc'), limit(100));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const users = new Set();
-            const rooms: any[] = [];
+            const usersMap = new Map();
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
-                if (!users.has(data.senderId) && data.senderId !== user.uid) {
-                    users.add(data.senderId);
-                    rooms.push({ id: data.senderId, lastMessage: data.text });
+                const uid = data.roomId; // roomId is essentially the customer's UID
+                if (uid && !usersMap.has(uid)) {
+                    // Try to use the senderName if available, otherwise fallback
+                    const displayName = data.senderId === uid ? data.senderName : (usersMap.get(uid)?.name || 'Unknown');
+                    usersMap.set(uid, { id: uid, name: displayName, lastMsg: data.text });
                 }
-                // Also check if admin sent to a user, that user should be in list (simplified logic)
             });
-            // Better approach requires a separate 'chatRooms' collection, but for this demo, 
-            // we will query distinct senderIds or manually group. 
-            // Simplified: Just use a hardcoded list or assume reservations create chat intent.
-            // For now, let's just listen to all messages and group by userId locally for the UI.
+            setChatUsers(Array.from(usersMap.values()));
         });
         return () => unsubscribe();
     }
   }, [user]);
 
-  // Admin: Simplify room listing for demo - Fetch recent messages to identify users
+  // Fetch Messages for the selected room
   useEffect(() => {
-    if (user?.role === UserRole.ADMIN) {
-       // This is a simplified way to get chat heads. In prod, use a separate 'rooms' collection.
-       // We will just show a list of unique userIds from messages where sender != admin
-       const q = query(collection(db, 'chats'), orderBy('createdAt', 'desc'));
-       const unsubscribe = onSnapshot(q, (snapshot) => {
-         const uniqueUsers = new Map();
-         snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            const otherId = data.senderId === user.uid ? data.receiverId : data.senderId; // Need receiverId in schema to be perfect
-            // Fallback: If current user is admin, we need to know who the message belongs to.
-            // Let's assume a 'roomId' field exists or we filter by userId.
-         });
-       });
-       // Actually, let's implement a simpler "All Chats" view for Admin or just 1:1 for Customer.
-       // Given constraints, let's implement: Customer sees their chat. Admin needs to pick a user.
-    }
-  }, [user]);
-  
-  // Fetch Messages
-  useEffect(() => {
-    if (!selectedUserId && user?.role === UserRole.ADMIN) return;
+    if (!selectedUserId) return; // Wait for selection
 
-    // Defines the "Room": for a customer, it's their ID. For admin, it's the selected customer's ID.
-    const roomId = user?.role === UserRole.CUSTOMER ? user.uid : selectedUserId;
-    if(!roomId) return;
-
+    const roomId = selectedUserId;
+    
+    // Simple query: get messages for this room
+    // Note: 'where' + 'orderBy' requires an index. If index is missing, it will throw an error in console with a link to create it.
+    // We will use client-side filtering if index is an issue for 'where' + 'orderBy', 
+    // but best practice is to create the index. 
+    // For safety in this prompt response without console access, we query by roomId and sort in memory if needed, 
+    // OR just use the query assuming index creation. 
+    // Let's try the proper query. If it fails, the user needs to click the link in console.
     const q = query(
         collection(db, 'chats'), 
         where('roomId', '==', roomId),
@@ -85,13 +70,21 @@ const Chat: React.FC = () => {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+      const msgs = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return { 
+              id: doc.id, 
+              ...data,
+              // Handle potential null during local write
+              createdAt: data.createdAt || { seconds: Date.now() / 1000, nanoseconds: 0 } 
+          } as ChatMessage
+      });
       setMessages(msgs);
-      scrollToBottom();
+      setTimeout(scrollToBottom, 100);
     });
 
     return () => unsubscribe();
-  }, [selectedUserId, user]);
+  }, [selectedUserId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -99,52 +92,45 @@ const Chat: React.FC = () => {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim() || !user || !selectedUserId) return;
     
-    // Room ID is always the Customer's UID
-    const roomId = user.role === UserRole.CUSTOMER ? user.uid : selectedUserId;
-    if (!roomId) return;
+    const roomId = selectedUserId;
 
-    await addDoc(collection(db, 'chats'), {
-      text: newMessage,
-      createdAt: serverTimestamp(),
-      senderId: user.uid,
-      roomId: roomId,
-      senderName: user.displayName || 'User',
-      isRead: false
-    });
-
-    setNewMessage('');
+    try {
+        await addDoc(collection(db, 'chats'), {
+            text: newMessage,
+            createdAt: serverTimestamp(),
+            senderId: user.uid,
+            roomId: roomId,
+            senderName: user.displayName || (user.role === UserRole.ADMIN ? '관리자' : '고객'),
+            isRead: false
+        });
+        setNewMessage('');
+    } catch (error) {
+        console.error("Error sending message", error);
+        alert("메시지 전송 실패");
+    }
   };
-  
-  // ADMIN VIEW: List of customers to chat with (Derived from Reservations for simplicity)
-  const [customers, setCustomers] = useState<any[]>([]);
-  useEffect(() => {
-      if(user?.role === UserRole.ADMIN) {
-          const q = query(collection(db, 'reservations')); // Get users from reservations
-          const unsub = onSnapshot(q, (snap) => {
-             const unique = new Map();
-             snap.docs.forEach(d => {
-                 const data = d.data();
-                 unique.set(data.userId, { id: data.userId, name: data.userName });
-             });
-             setCustomers(Array.from(unique.values()));
-          });
-          return () => unsub();
-      }
-  }, [user]);
 
-
+  // ADMIN VIEW: Select User
   if (user?.role === UserRole.ADMIN && !selectedUserId) {
       return (
           <div className="p-4">
-              <h2 className="text-xl font-bold mb-4">상담 대기 고객</h2>
-              {customers.length === 0 ? <p className="text-gray-500">예약 내역이 있는 고객이 표시됩니다.</p> : null}
+              <h2 className="text-xl font-bold mb-4">상담 대기 목록</h2>
+              {chatUsers.length === 0 ? (
+                  <div className="text-center text-gray-500 py-10 bg-white rounded-xl border border-gray-200">
+                      <p>진행 중인 상담이 없습니다.</p>
+                      <p className="text-xs mt-2">고객이 메시지를 보내면 여기에 표시됩니다.</p>
+                  </div>
+              ) : null}
               <div className="space-y-2">
-                  {customers.map(c => (
-                      <div key={c.id} onClick={() => setSelectedUserId(c.id)} className="bg-white p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50 flex items-center gap-3">
-                          <div className="bg-brand-100 p-2 rounded-full"><UserIcon size={20} className="text-brand-600"/></div>
-                          <span className="font-medium">{c.name}</span>
+                  {chatUsers.map(c => (
+                      <div key={c.id} onClick={() => setSelectedUserId(c.id)} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center gap-3 transition">
+                          <div className="bg-brand-100 p-3 rounded-full"><UserIcon size={20} className="text-brand-600"/></div>
+                          <div className="flex-1 min-w-0">
+                              <span className="font-bold text-gray-800 block">{c.name}</span>
+                              <span className="text-xs text-gray-500 truncate block">{c.lastMsg}</span>
+                          </div>
                       </div>
                   ))}
               </div>
@@ -155,9 +141,14 @@ const Chat: React.FC = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {user?.role === UserRole.ADMIN && (
-          <button onClick={() => setSelectedUserId(null)} className="mb-2 text-sm text-gray-500 underline self-start">
-              &larr; 목록으로 돌아가기
-          </button>
+          <div className="flex items-center gap-2 mb-2">
+             <button onClick={() => setSelectedUserId(null)} className="text-sm text-gray-500 hover:text-brand-600 flex items-center">
+                 &larr; 목록으로
+             </button>
+             <span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-700">
+                 {chatUsers.find(u => u.id === selectedUserId)?.name || '고객'}님과의 대화
+             </span>
+          </div>
       )}
       
       <div className="flex-1 bg-white rounded-t-xl shadow-inner overflow-y-auto p-4 space-y-4 border border-gray-200">
@@ -170,7 +161,7 @@ const Chat: React.FC = () => {
           const isMe = msg.senderId === user?.uid;
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-brand-500 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
+              <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-brand-500 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
                 {msg.text}
               </div>
             </div>
@@ -185,9 +176,9 @@ const Chat: React.FC = () => {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="메시지를 입력하세요..."
-          className="flex-1 px-4 py-2 bg-gray-50 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="flex-1 px-4 py-2 bg-gray-50 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
         />
-        <button type="submit" className="bg-brand-600 text-white p-2 rounded-full hover:bg-brand-700 transition">
+        <button type="submit" className="bg-brand-600 text-white p-2 rounded-full hover:bg-brand-700 transition shadow-md">
           <Send size={20} />
         </button>
       </form>

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -20,3 +20,5 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 export const ADMIN_EMAIL = "acehwan69@gmail.com";
+
+export { createUserWithEmailAndPassword, signInWithEmailAndPassword };

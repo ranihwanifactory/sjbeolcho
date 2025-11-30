@@ -4,12 +4,14 @@ import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X } from 'lucide-react';
+import KakaoMap from '../components/KakaoMap';
 
 const Admin: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [selectedMapLocation, setSelectedMapLocation] = useState<{lat: number, lng: number, name: string} | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== UserRole.ADMIN) {
@@ -32,8 +34,12 @@ const Admin: React.FC = () => {
     }
   };
 
-  const openMap = (lat: number, lng: number) => {
-      window.open(`https://map.kakao.com/link/map/${lat},${lng}`, '_blank');
+  const openMapModal = (lat: number, lng: number, name: string) => {
+      setSelectedMapLocation({ lat, lng, name });
+  };
+
+  const closeMapModal = () => {
+      setSelectedMapLocation(null);
   }
 
   const statusColors = {
@@ -44,7 +50,7 @@ const Admin: React.FC = () => {
   };
 
   return (
-    <div className="pb-8">
+    <div className="pb-8 relative">
       <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center justify-between">
           <span>관리자 대시보드</span>
           <span className="text-sm font-normal text-gray-500 bg-gray-100 px-3 py-1 rounded-full">총 {reservations.length}건</span>
@@ -80,10 +86,10 @@ const Admin: React.FC = () => {
                     <div className="flex-1">
                         <span className="font-semibold">위치:</span> {res.locationName}
                         <button 
-                            onClick={() => openMap(res.coordinates.lat, res.coordinates.lng)}
-                            className="ml-2 text-brand-600 underline text-xs inline-flex items-center"
+                            onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)}
+                            className="ml-2 text-brand-600 underline text-xs inline-flex items-center font-bold hover:text-brand-800"
                         >
-                            <MapIcon size={12} className="mr-1"/> 지도보기
+                            <MapIcon size={12} className="mr-1"/> 지도보기 (마커확인)
                         </button>
                     </div>
                 </div>
@@ -127,6 +133,33 @@ const Admin: React.FC = () => {
             </div>
         )}
       </div>
+
+      {/* Map Modal */}
+      {selectedMapLocation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white w-full max-w-lg rounded-xl overflow-hidden shadow-2xl relative">
+                  <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                      <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                          <MapPin size={18} className="text-brand-600"/>
+                          예약 위치 확인
+                      </h3>
+                      <button onClick={closeMapModal} className="p-1 rounded-full hover:bg-gray-200 transition">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  <div className="p-4">
+                      <KakaoMap 
+                          readOnly={true} 
+                          initialLat={selectedMapLocation.lat} 
+                          initialLng={selectedMapLocation.lng} 
+                      />
+                      <p className="mt-3 text-sm text-gray-600 bg-gray-100 p-2 rounded">
+                          <span className="font-bold">주소/명칭:</span> {selectedMapLocation.name}
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
