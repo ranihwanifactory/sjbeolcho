@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CalendarPlus, MessageCircle, User as UserIcon, LogOut, Menu, Share2, Shield } from 'lucide-react';
+import { Home, CalendarPlus, MessageCircle, User as UserIcon, LogOut, Menu, Share2, Shield, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types.ts';
 
@@ -47,6 +47,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navItems = [
     { path: '/', label: '홈', icon: <Home size={20} /> },
     { path: '/reserve', label: '예약하기', icon: <CalendarPlus size={20} /> },
+    { path: '/reviews', label: '이용후기', icon: <Star size={20} /> },
     { path: '/chat', label: '문의채팅', icon: <MessageCircle size={20} /> },
   ];
 

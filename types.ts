@@ -54,3 +54,13 @@ export interface ChatRoom {
   lastMessageTime: Timestamp;
   unreadCount: number;
 }
+
+export interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  text: string;
+  photoUrl?: string;
+  createdAt: Timestamp;
+}

@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Reservation from './pages/Reservation';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
+import Reviews from './pages/Reviews';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserRole } from './types.ts';
 
@@ -44,6 +45,10 @@ const AppRoutes = () => {
                             <Chat />
                         </PrivateRoute>
                     } 
+                />
+                 <Route 
+                    path="/reviews" 
+                    element={<Reviews />} 
                 />
                 <Route 
                     path="/admin" 

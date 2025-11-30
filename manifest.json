@@ -1,0 +1,20 @@
+{
+  "short_name": "젊은벌초",
+  "name": "젊은벌초 - 성주권 벌초 예약",
+  "icons": [
+    {
+      "src": "/main.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/main.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#166534",
+  "background_color": "#ffffff"
+}

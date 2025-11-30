@@ -30,8 +30,7 @@ const Chat: React.FC = () => {
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
         // Fetch recent chats to find unique users. 
-        // Note: For a scalable app, use a separate 'chat_rooms' collection.
-        // For this size, we query recent messages.
+        // We order by createdAt desc to get latest. This usually works without composite index if no where clause.
         const q = query(collection(db, 'chats'), orderBy('createdAt', 'desc'), limit(100));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const usersMap = new Map();
@@ -56,17 +55,11 @@ const Chat: React.FC = () => {
 
     const roomId = selectedUserId;
     
-    // Simple query: get messages for this room
-    // Note: 'where' + 'orderBy' requires an index. If index is missing, it will throw an error in console with a link to create it.
-    // We will use client-side filtering if index is an issue for 'where' + 'orderBy', 
-    // but best practice is to create the index. 
-    // For safety in this prompt response without console access, we query by roomId and sort in memory if needed, 
-    // OR just use the query assuming index creation. 
-    // Let's try the proper query. If it fails, the user needs to click the link in console.
+    // FIX: Removing 'orderBy' from the query to avoid "Missing Index" error on Firestore.
+    // We will sort the messages in memory (JavaScript) instead.
     const q = query(
         collection(db, 'chats'), 
-        where('roomId', '==', roomId),
-        orderBy('createdAt', 'asc')
+        where('roomId', '==', roomId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -75,10 +68,18 @@ const Chat: React.FC = () => {
           return { 
               id: doc.id, 
               ...data,
-              // Handle potential null during local write
+              // Handle potential null 'createdAt' (optimistic UI) by falling back to now
               createdAt: data.createdAt || { seconds: Date.now() / 1000, nanoseconds: 0 } 
           } as ChatMessage
       });
+
+      // Sort in memory by time ascending
+      msgs.sort((a, b) => {
+          const timeA = a.createdAt.seconds;
+          const timeB = b.createdAt.seconds;
+          return timeA - timeB;
+      });
+
       setMessages(msgs);
       setTimeout(scrollToBottom, 100);
     });
@@ -106,6 +107,7 @@ const Chat: React.FC = () => {
             isRead: false
         });
         setNewMessage('');
+        // We don't need to manually update state, onSnapshot will pick it up
     } catch (error) {
         console.error("Error sending message", error);
         alert("메시지 전송 실패");
