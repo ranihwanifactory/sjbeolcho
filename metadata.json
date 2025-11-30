@@ -1,0 +1,7 @@
+{
+  "name": "젊은벌초 - 성주권 벌초 예약",
+  "description": "경북 성주권 전문 벌초 대행 서비스 예약 시스템입니다. 위성 지도 기반 정확한 위치 지정 및 실시간 상담 기능을 제공합니다.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
