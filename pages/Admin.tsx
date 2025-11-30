@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2 } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
 
 const Admin: React.FC = () => {
@@ -32,6 +32,17 @@ const Admin: React.FC = () => {
     if (window.confirm(`상태를 '${status}'(으)로 변경하시겠습니까?`)) {
         await updateDoc(doc(db, 'reservations', id), { status });
     }
+  };
+
+  const handleDelete = async (id: string) => {
+      if (window.confirm("정말로 이 예약 내역을 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.")) {
+          try {
+              await deleteDoc(doc(db, 'reservations', id));
+          } catch (error) {
+              console.error("Error deleting document: ", error);
+              alert("삭제 중 오류가 발생했습니다.");
+          }
+      }
   };
 
   const openMapModal = (lat: number, lng: number, name: string) => {
@@ -113,7 +124,7 @@ const Admin: React.FC = () => {
                 )}
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 items-center">
                 {Object.values(ReservationStatus).map((status) => (
                     <button
                         key={status}
@@ -123,6 +134,13 @@ const Admin: React.FC = () => {
                         {status}로 변경
                     </button>
                 ))}
+                <div className="w-[1px] h-6 bg-gray-300 mx-1"></div>
+                <button
+                    onClick={() => handleDelete(res.id)}
+                    className="px-3 py-1.5 rounded-full text-xs border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 whitespace-nowrap transition flex items-center gap-1"
+                >
+                    <Trash2 size={12} /> 삭제
+                </button>
             </div>
           </div>
         ))}
