@@ -46,7 +46,11 @@ const Admin: React.FC = () => {
   };
 
   const openMapModal = (lat: number, lng: number, name: string) => {
-      setSelectedMapLocation({ lat, lng, name });
+      if (lat && lng) {
+          setSelectedMapLocation({ lat, lng, name });
+      } else {
+          alert("위치 정보가 올바르지 않습니다.");
+      }
   };
 
   const closeMapModal = () => {
@@ -96,12 +100,14 @@ const Admin: React.FC = () => {
                     <MapPin size={16} className="mt-0.5 text-gray-400" />
                     <div className="flex-1">
                         <span className="font-semibold">위치:</span> {res.locationName}
-                        <button 
-                            onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)}
-                            className="ml-2 text-brand-600 underline text-xs inline-flex items-center font-bold hover:text-brand-800"
-                        >
-                            <MapIcon size={12} className="mr-1"/> 지도보기 (마커확인)
-                        </button>
+                        {res.coordinates && (
+                            <button 
+                                onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)}
+                                className="ml-2 text-brand-600 underline text-xs inline-flex items-center font-bold hover:text-brand-800"
+                            >
+                                <MapIcon size={12} className="mr-1"/> 지도보기 (마커확인)
+                            </button>
+                        )}
                     </div>
                 </div>
                 {res.description && (

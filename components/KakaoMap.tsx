@@ -34,6 +34,11 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
     if (!window.kakao || !mapContainer.current) return;
 
     window.kakao.maps.load(() => {
+      // Clear previous map instance if it exists to prevent stacking
+      if (mapContainer.current) {
+        mapContainer.current.innerHTML = '';
+      }
+
       const centerLat = initialLat || DEFAULT_LAT;
       const centerLng = initialLng || DEFAULT_LNG;
       
@@ -70,7 +75,7 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialLat, initialLng, readOnly]); // Re-init if props change significantly
+  }, [initialLat, initialLng, readOnly]); 
 
   const handleSearch = () => {
     if (readOnly || !map || !searchQuery) return;
