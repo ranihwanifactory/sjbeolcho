@@ -2,7 +2,8 @@ import { Timestamp } from 'firebase/firestore';
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  CUSTOMER = 'CUSTOMER'
+  CUSTOMER = 'CUSTOMER',
+  WORKER = 'WORKER'
 }
 
 export interface UserProfile {
@@ -11,6 +12,18 @@ export interface UserProfile {
   displayName?: string;
   photoURL?: string;
   role: UserRole;
+}
+
+export interface WorkerProfile {
+  uid: string;
+  displayName: string;
+  phone: string;
+  bio: string; // Brief introduction
+  coordinates: Coordinates; // Base location
+  address: string;
+  experienceYears: number;
+  isAvailable: boolean;
+  photoUrl?: string;
 }
 
 export interface Coordinates {

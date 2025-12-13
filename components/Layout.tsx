@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin } from 'lucide-react';
+import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin, Users, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole, Reservation, ReservationStatus } from '../types.ts';
 import { db } from '../services/firebase';
@@ -86,13 +86,22 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const navItems = [
     { path: '/', label: '홈', icon: <Home size={20} /> },
+    { path: '/workers-map', label: '우리동네 반장', icon: <Users size={20} /> },
     { path: '/reserve', label: '예약하기', icon: <CalendarPlus size={20} /> },
     { path: '/reviews', label: '이용후기', icon: <Star size={20} /> },
-    { path: '/chat', label: '문의채팅', icon: <MessageCircle size={20} /> },
   ];
+
+  if (user?.role === UserRole.WORKER) {
+    navItems.push({ path: '/worker-settings', label: '내 프로필', icon: <Settings size={20} /> });
+  }
 
   if (user?.role === UserRole.ADMIN) {
     navItems.push({ path: '/admin', label: '관리자', icon: <Shield size={20} /> });
+  }
+
+  // Chat is separate or handled differently in mobile bar usually, but putting it in list for consistency
+  if (!navItems.find(i => i.path === '/chat')) {
+      navItems.push({ path: '/chat', label: '문의', icon: <MessageCircle size={20} /> });
   }
 
   return (
@@ -213,16 +222,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
       )}
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile Bottom Navigation - Showing max 5 items for better UI */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 pb-safe shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="max-w-3xl mx-auto flex justify-around">
-          {navItems.map((item) => {
+          {navItems.slice(0, 5).map((item) => {
              const isActive = location.pathname === item.path;
              return (
               <Link 
                 key={item.path} 
                 to={item.path}
-                className={`flex flex-col items-center py-3 px-4 flex-1 transition-colors ${isActive ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+                className={`flex flex-col items-center py-3 px-2 flex-1 transition-colors ${isActive ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
               >
                 {item.icon}
                 <span className="text-[10px] mt-1 font-medium">{item.label}</span>

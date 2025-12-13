@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, googleProvider, ADMIN_EMAIL } from '../services/firebase';
+import { auth, googleProvider, ADMIN_EMAIL, db } from '../services/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, UserRole } from '../types.ts';
 
 interface AuthContextType {
@@ -8,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  signupWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  signupWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -25,13 +26,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const role = firebaseUser.email === ADMIN_EMAIL ? UserRole.ADMIN : UserRole.CUSTOMER;
+        // Check Firestore for user role
+        let role = UserRole.CUSTOMER;
+        
+        if (firebaseUser.email === ADMIN_EMAIL) {
+            role = UserRole.ADMIN;
+        } else {
+            // Try to fetch custom role from 'users' collection
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+                const data = userDoc.data();
+                if (data.role) role = data.role;
+            }
+        }
+
         setUser({
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || '고객',
+          displayName: firebaseUser.displayName || '사용자',
           photoURL: firebaseUser.photoURL || '',
           role,
         });
@@ -46,7 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      // Create user doc if not exists
+      const userDocRef = doc(db, 'users', result.user.uid);
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists()) {
+        await setDoc(userDocRef, {
+            email: result.user.email,
+            name: result.user.displayName,
+            role: UserRole.CUSTOMER, // Default to customer for Google login
+            createdAt: new Date()
+        });
+      }
     } catch (error) {
       console.error("Google Login failed", error);
       throw error;
@@ -62,13 +88,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
-  const signupWithEmail = async (email: string, pass: string, name: string) => {
+  const signupWithEmail = async (email: string, pass: string, name: string, role: UserRole = UserRole.CUSTOMER) => {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         await updateProfile(userCredential.user, {
             displayName: name
         });
-        // Force refresh user state or let onAuthStateChanged handle it
+        
+        // Save additional user info including role
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+            email,
+            name,
+            role,
+            createdAt: new Date()
+        });
+
+        // Force local state update or rely on onAuthStateChanged
     } catch (error) {
         console.error("Signup failed", error);
         throw error;

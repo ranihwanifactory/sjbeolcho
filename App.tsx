@@ -7,6 +7,8 @@ import Reservation from './pages/Reservation';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
 import Reviews from './pages/Reviews';
+import WorkerSettings from './pages/WorkerSettings';
+import WorkersMap from './pages/WorkersMap';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserRole } from './types.ts';
 
@@ -49,6 +51,18 @@ const AppRoutes = () => {
                  <Route 
                     path="/reviews" 
                     element={<Reviews />} 
+                />
+                <Route 
+                    path="/workers-map" 
+                    element={<WorkersMap />} 
+                />
+                <Route 
+                    path="/worker-settings" 
+                    element={
+                        <PrivateRoute>
+                            <WorkerSettings />
+                        </PrivateRoute>
+                    } 
                 />
                 <Route 
                     path="/admin" 

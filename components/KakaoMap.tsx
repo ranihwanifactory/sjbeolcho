@@ -1,11 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, Search, Crosshair } from 'lucide-react';
 
+export interface MapMarkerData {
+  lat: number;
+  lng: number;
+  title?: string;
+  content?: string; // HTML content for InfoWindow
+  onClick?: () => void;
+}
+
 interface KakaoMapProps {
   onLocationSelect?: (lat: number, lng: number, address: string) => void;
   initialLat?: number;
   initialLng?: number;
   readOnly?: boolean;
+  markers?: MapMarkerData[]; // Array of markers to display
 }
 
 declare global {
@@ -18,11 +27,13 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
     onLocationSelect, 
     initialLat, 
     initialLng, 
-    readOnly = false 
+    readOnly = false,
+    markers = []
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<any>(null);
-  const [marker, setMarker] = useState<any>(null);
+  const [singleMarker, setSingleMarker] = useState<any>(null);
+  const [markerInstances, setMarkerInstances] = useState<any[]>([]);
   const [address, setAddress] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -34,7 +45,7 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
     if (!window.kakao || !mapContainer.current) return;
 
     window.kakao.maps.load(() => {
-      // Clear previous map instance if it exists to prevent stacking
+      // Clear previous map instance HTML
       if (mapContainer.current) {
         mapContainer.current.innerHTML = '';
       }
@@ -44,38 +55,75 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
       
       const options = {
         center: new window.kakao.maps.LatLng(centerLat, centerLng),
-        level: 3,
+        level: markers.length > 0 ? 9 : 3, // Zoom out if showing multiple markers
         mapTypeId: window.kakao.maps.MapTypeId.HYBRID
       };
       const createdMap = new window.kakao.maps.Map(mapContainer.current, options);
       setMap(createdMap);
 
-      const markerPosition = new window.kakao.maps.LatLng(centerLat, centerLng);
-      const createdMarker = new window.kakao.maps.Marker({
-        position: markerPosition
-      });
-      createdMarker.setMap(createdMap);
-      setMarker(createdMarker);
+      // Mode 1: Multi-marker mode (Read Only usually)
+      if (markers.length > 0) {
+        const bounds = new window.kakao.maps.LatLngBounds();
+        const instances: any[] = [];
 
-      if (!readOnly) {
-          // Click event
-          window.kakao.maps.event.addListener(createdMap, 'click', (mouseEvent: any) => {
-            const latlng = mouseEvent.latLng;
-            createdMarker.setPosition(latlng);
-            
-            const geocoder = new window.kakao.maps.services.Geocoder();
-            geocoder.coord2Address(latlng.getLng(), latlng.getLat(), (result: any, status: any) => {
-              if (status === window.kakao.maps.services.Status.OK) {
-                const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
-                setAddress(addr);
-                if(onLocationSelect) onLocationSelect(latlng.getLat(), latlng.getLng(), addr);
-              }
-            });
+        markers.forEach(m => {
+           const pos = new window.kakao.maps.LatLng(m.lat, m.lng);
+           const marker = new window.kakao.maps.Marker({
+               position: pos,
+               map: createdMap,
+               title: m.title
+           });
+           bounds.extend(pos);
+           instances.push(marker);
+
+           if (m.content || m.onClick) {
+               window.kakao.maps.event.addListener(marker, 'click', () => {
+                   if (m.onClick) m.onClick();
+                   
+                   if (m.content) {
+                       const infowindow = new window.kakao.maps.InfoWindow({
+                           content: m.content,
+                           removable: true
+                       });
+                       infowindow.open(createdMap, marker);
+                   }
+               });
+           }
+        });
+        setMarkerInstances(instances);
+        if (markers.length > 1) {
+            createdMap.setBounds(bounds);
+        }
+      } 
+      // Mode 2: Single location select / view mode
+      else {
+          const markerPosition = new window.kakao.maps.LatLng(centerLat, centerLng);
+          const createdMarker = new window.kakao.maps.Marker({
+            position: markerPosition
           });
+          createdMarker.setMap(createdMap);
+          setSingleMarker(createdMarker);
+
+          if (!readOnly) {
+              // Click event to move marker
+              window.kakao.maps.event.addListener(createdMap, 'click', (mouseEvent: any) => {
+                const latlng = mouseEvent.latLng;
+                createdMarker.setPosition(latlng);
+                
+                const geocoder = new window.kakao.maps.services.Geocoder();
+                geocoder.coord2Address(latlng.getLng(), latlng.getLat(), (result: any, status: any) => {
+                  if (status === window.kakao.maps.services.Status.OK) {
+                    const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
+                    setAddress(addr);
+                    if(onLocationSelect) onLocationSelect(latlng.getLat(), latlng.getLng(), addr);
+                  }
+                });
+              });
+          }
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialLat, initialLng, readOnly]); 
+  }, [initialLat, initialLng, readOnly, JSON.stringify(markers)]); 
 
   const handleSearch = () => {
     if (readOnly || !map || !searchQuery) return;
@@ -88,7 +136,7 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         
         const moveLatLon = new window.kakao.maps.LatLng(lat, lng);
         map.setCenter(moveLatLon);
-        marker.setPosition(moveLatLon);
+        if (singleMarker) singleMarker.setPosition(moveLatLon);
         
         setAddress(place.address_name || place.place_name);
         if(onLocationSelect) onLocationSelect(parseFloat(lat), parseFloat(lng), place.address_name || place.place_name);
@@ -107,15 +155,15 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         
         if (map) {
           map.setCenter(locPosition);
-          marker.setPosition(locPosition);
+          if (singleMarker) singleMarker.setPosition(locPosition);
           
-          if (!readOnly) {
+          if (!readOnly && onLocationSelect) {
               const geocoder = new window.kakao.maps.services.Geocoder();
               geocoder.coord2Address(lng, lat, (result: any, status: any) => {
                  if (status === window.kakao.maps.services.Status.OK) {
                     const addr = result[0].address?.address_name || '현위치';
                     setAddress(addr);
-                    if(onLocationSelect) onLocationSelect(lat, lng, addr);
+                    onLocationSelect(lat, lng, addr);
                  }
               });
           }
@@ -134,7 +182,7 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="주소 또는 장소 검색 (예: 성주읍...)"
+              placeholder="주소 또는 장소 검색"
               className="flex-1 px-4 py-2 text-sm rounded-full shadow-md border-0 focus:ring-2 focus:ring-brand-500"
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
@@ -159,14 +207,14 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
           </button>
       )}
 
-      {/* Address Overlay - Show for both modes if available */}
-      {(address || readOnly) && (
+      {/* Address Overlay - Show only in select mode */}
+      {(address && !readOnly) && (
         <div className="absolute bottom-4 left-4 right-14 bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg z-10 text-xs sm:text-sm">
           <div className="flex items-center gap-1 text-brand-800 font-bold">
             <MapPin size={14} />
-            {readOnly ? '예약된 위치' : '선택된 위치'}
+            선택된 위치
           </div>
-          {address && <p className="truncate">{address}</p>}
+          <p className="truncate">{address}</p>
         </div>
       )}
     </div>

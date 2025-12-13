@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, Wrench } from 'lucide-react';
+import { UserRole } from '../types.ts';
 
 const Login: React.FC = () => {
   const { user, loginWithGoogle, loginWithEmail, signupWithEmail } = useAuth();
   const navigate = useNavigate();
   
   const [isSignup, setIsSignup] = useState(false);
+  const [isWorker, setIsWorker] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -16,7 +18,11 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      navigate(-1); // Go back to where they came from
+      if (user.role === UserRole.WORKER) {
+          navigate('/worker-settings');
+      } else {
+          navigate('/');
+      }
     }
   }, [user, navigate]);
 
@@ -27,7 +33,8 @@ const Login: React.FC = () => {
 
     try {
         if (isSignup) {
-            await signupWithEmail(email, password, name);
+            const role = isWorker ? UserRole.WORKER : UserRole.CUSTOMER;
+            await signupWithEmail(email, password, name, role);
         } else {
             await loginWithEmail(email, password);
         }
@@ -52,8 +59,12 @@ const Login: React.FC = () => {
     <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
         <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-800">{isSignup ? '회원가입' : '로그인'}</h1>
-            <p className="text-gray-500 text-sm mt-2">서비스 이용을 위해 로그인이 필요합니다.</p>
+            <h1 className="text-2xl font-bold text-gray-800">{isSignup ? (isWorker ? '반장님 회원가입' : '고객 회원가입') : '로그인'}</h1>
+            <p className="text-gray-500 text-sm mt-2">
+                {isSignup && isWorker 
+                    ? '성주의 벌초 전문가로 활동해보세요!' 
+                    : '서비스 이용을 위해 로그인이 필요합니다.'}
+            </p>
         </div>
 
         {error && (
@@ -69,7 +80,7 @@ const Login: React.FC = () => {
                     <User className="absolute left-3 top-3 text-gray-400" size={20} />
                     <input 
                         type="text" 
-                        placeholder="이름"
+                        placeholder="이름 (실명)"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none"
@@ -99,6 +110,18 @@ const Login: React.FC = () => {
                     required
                 />
             </div>
+            
+            {isSignup && (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer" onClick={() => setIsWorker(!isWorker)}>
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center ${isWorker ? 'bg-brand-600 border-brand-600' : 'bg-white border-gray-400'}`}>
+                        {isWorker && <span className="text-white text-xs">✓</span>}
+                    </div>
+                    <label className="text-sm text-gray-700 cursor-pointer select-none flex items-center gap-2">
+                         <Wrench size={16} className="text-brand-600"/>
+                         벌초 반장님으로 가입하시나요?
+                    </label>
+                </div>
+            )}
 
             <button 
                 type="submit" 
@@ -129,7 +152,7 @@ const Login: React.FC = () => {
         <div className="text-center text-sm">
             <span className="text-gray-500">{isSignup ? '이미 계정이 있으신가요?' : '계정이 없으신가요?'}</span>
             <button 
-                onClick={() => { setIsSignup(!isSignup); setError(''); }}
+                onClick={() => { setIsSignup(!isSignup); setError(''); setIsWorker(false); }}
                 className="ml-2 text-brand-600 font-bold hover:underline"
             >
                 {isSignup ? '로그인' : '회원가입'}
