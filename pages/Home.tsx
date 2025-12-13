@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, MapPin, Mail, CheckCircle, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star } from 'lucide-react';
+import '../types';
 
 const Home: React.FC = () => {
   return (

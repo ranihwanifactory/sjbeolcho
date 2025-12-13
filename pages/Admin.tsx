@@ -203,22 +203,24 @@ const Admin: React.FC = () => {
                       <div className="bg-brand-50 p-3 rounded-full hidden md:block">
                           <Users size={24} className="text-brand-600"/>
                       </div>
-                      <div className="flex-1">
-                          <h3 className="font-bold text-lg text-gray-800">{worker.displayName} <span className="text-xs text-brand-600 font-normal bg-brand-100 px-2 py-0.5 rounded-full">반장님</span></h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
+                      <div className="flex-1 w-full">
+                          <div className="flex items-center flex-wrap gap-2 mb-2">
+                              <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
+                              <span className="text-xs text-brand-600 font-normal bg-brand-100 px-2 py-0.5 rounded-full">반장님</span>
+                              <button 
+                                 onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
+                                 className="ml-auto md:ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition border border-gray-200"
+                              >
+                                  <MapIcon size={12} /> 위치보기
+                              </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
                               <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone}</div>
                               <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address}</div>
-                              <div><strong>경력:</strong> {worker.experienceYears}년</div>
-                              <div><strong>소개:</strong> {worker.bio}</div>
+                              <div className="col-span-1 md:col-span-2"><strong>경력:</strong> {worker.experienceYears}년</div>
+                              <div className="col-span-1 md:col-span-2 text-gray-500 text-xs mt-1 bg-gray-50 p-2 rounded">{worker.bio}</div>
                           </div>
-                      </div>
-                      <div>
-                          <button 
-                             onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
-                             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200"
-                          >
-                              위치 확인
-                          </button>
                       </div>
                   </div>
               ))}

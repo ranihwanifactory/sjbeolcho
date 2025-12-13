@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, Search, Crosshair } from 'lucide-react';
+import '../types';
 
 export interface MapMarkerData {
   lat: number;
