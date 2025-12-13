@@ -52,7 +52,13 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         window.kakao.maps.load(() => {
             if (!mapContainer.current) return;
             
-            // Clear previous map instance HTML
+            // Safety check: Ensure constructors exist
+            if (!window.kakao.maps.LatLng || !window.kakao.maps.Map) {
+                console.error("Kakao Maps SDK loaded but constructors are missing.");
+                return;
+            }
+
+            // Clear previous map instance HTML to prevent duplicates
             mapContainer.current.innerHTML = '';
 
             const centerLat = initialLat || DEFAULT_LAT;
@@ -72,28 +78,28 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
                 const instances: any[] = [];
 
                 markers.forEach(m => {
-                const pos = new window.kakao.maps.LatLng(m.lat, m.lng);
-                const marker = new window.kakao.maps.Marker({
-                    position: pos,
-                    map: createdMap,
-                    title: m.title
-                });
-                bounds.extend(pos);
-                instances.push(marker);
-
-                if (m.content || m.onClick) {
-                    window.kakao.maps.event.addListener(marker, 'click', () => {
-                        if (m.onClick) m.onClick();
-                        
-                        if (m.content) {
-                            const infowindow = new window.kakao.maps.InfoWindow({
-                                content: m.content,
-                                removable: true
-                            });
-                            infowindow.open(createdMap, marker);
-                        }
+                    const pos = new window.kakao.maps.LatLng(m.lat, m.lng);
+                    const marker = new window.kakao.maps.Marker({
+                        position: pos,
+                        map: createdMap,
+                        title: m.title
                     });
-                }
+                    bounds.extend(pos);
+                    instances.push(marker);
+
+                    if (m.content || m.onClick) {
+                        window.kakao.maps.event.addListener(marker, 'click', () => {
+                            if (m.onClick) m.onClick();
+                            
+                            if (m.content) {
+                                const infowindow = new window.kakao.maps.InfoWindow({
+                                    content: m.content,
+                                    removable: true
+                                });
+                                infowindow.open(createdMap, marker);
+                            }
+                        });
+                    }
                 });
                 
                 if (markers.length > 1) {
@@ -169,7 +175,7 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
   useEffect(() => {
       if (!map || !singleMarker) return;
 
-      if (circleRadius > 0) {
+      if (circleRadius > 0 && window.kakao?.maps?.Circle) {
           if (circleRef.current) {
               // Update existing circle
               circleRef.current.setRadius(circleRadius);

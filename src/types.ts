@@ -1,13 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 // Fix for missing JSX.IntrinsicElements definitions
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      [elemName: string]: any;
-    }
-  }
-}
+// Declaration removed to avoid conflict with index.tsx
 
 export enum UserRole {
   ADMIN = 'ADMIN',
