@@ -31,7 +31,13 @@ export interface WorkerProfile {
   address: string;
   experienceYears: number;
   isAvailable: boolean;
-  photoUrl?: string;
+  photoUrl?: string; // Profile picture
+  
+  // New Fields
+  maxDistance: number; // Work coverage radius in km
+  equipmentCount: number; // Number of brush cutters owned
+  portfolioUrls: string[]; // List of work portfolio image URLs
+  isApproved: boolean; // Admin approval status
 }
 
 export interface Coordinates {

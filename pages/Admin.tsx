@@ -4,7 +4,7 @@ import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
 
 const Admin: React.FC = () => {
@@ -18,6 +18,7 @@ const Admin: React.FC = () => {
 
   // Workers State
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
+  const [selectedWorkerForPortfolio, setSelectedWorkerForPortfolio] = useState<WorkerProfile | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== UserRole.ADMIN) {
@@ -32,7 +33,7 @@ const Admin: React.FC = () => {
       setReservations(data);
     });
 
-    // Fetch Workers (Real-time not strictly necessary but good)
+    // Fetch Workers
     const qWork = query(collection(db, 'worker_profiles'));
     const unsubscribeWork = onSnapshot(qWork, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as WorkerProfile));
@@ -62,6 +63,17 @@ const Admin: React.FC = () => {
       }
   };
 
+  const handleApproveWorker = async (workerId: string) => {
+      if (window.confirm("이 반장님을 승인하시겠습니까?\n승인 시 지도에 즉시 노출됩니다.")) {
+          try {
+              await updateDoc(doc(db, 'worker_profiles', workerId), { isApproved: true });
+          } catch (error) {
+              console.error(error);
+              alert("승인 처리 중 오류가 발생했습니다.");
+          }
+      }
+  };
+
   const openMapModal = (lat: number, lng: number, name: string) => {
       if (lat && lng) {
           setSelectedMapLocation({ lat, lng, name });
@@ -80,6 +92,9 @@ const Admin: React.FC = () => {
     [ReservationStatus.COMPLETED]: 'bg-green-100 text-green-800',
     [ReservationStatus.CANCELLED]: 'bg-gray-100 text-gray-800',
   };
+
+  const pendingWorkers = workers.filter(w => !w.isApproved);
+  const activeWorkers = workers.filter(w => w.isApproved);
 
   return (
     <div className="pb-8 relative">
@@ -102,6 +117,7 @@ const Admin: React.FC = () => {
           >
               <Users size={20} />
               반장님 관리 ({workers.length})
+              {pendingWorkers.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{pendingWorkers.length}</span>}
           </button>
       </div>
       
@@ -197,38 +213,117 @@ const Admin: React.FC = () => {
 
       {/* Workers Tab */}
       {activeTab === 'workers' && (
-          <div className="space-y-4">
-              {workers.map(worker => (
-                  <div key={worker.uid} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-start">
-                      <div className="bg-brand-50 p-3 rounded-full hidden md:block">
-                          <Users size={24} className="text-brand-600"/>
-                      </div>
-                      <div className="flex-1 w-full">
-                          <div className="flex items-center flex-wrap gap-2 mb-2">
-                              <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
-                              <span className="text-xs text-brand-600 font-normal bg-brand-100 px-2 py-0.5 rounded-full">반장님</span>
-                              <button 
-                                 onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
-                                 className="ml-auto md:ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition border border-gray-200"
-                              >
-                                  <MapIcon size={12} /> 위치보기
-                              </button>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
-                              <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone}</div>
-                              <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address}</div>
-                              <div className="col-span-1 md:col-span-2"><strong>경력:</strong> {worker.experienceYears}년</div>
-                              <div className="col-span-1 md:col-span-2 text-gray-500 text-xs mt-1 bg-gray-50 p-2 rounded">{worker.bio}</div>
-                          </div>
+          <div className="space-y-8">
+              {/* Pending Section */}
+              {pendingWorkers.length > 0 && (
+                  <div>
+                      <h3 className="text-lg font-bold text-yellow-700 mb-3 flex items-center gap-2">
+                          <AlertTriangle size={20}/> 승인 대기 ({pendingWorkers.length})
+                      </h3>
+                      <div className="space-y-4">
+                          {pendingWorkers.map(worker => (
+                              <div key={worker.uid} className="bg-yellow-50 p-5 rounded-xl shadow-sm border border-yellow-200 flex flex-col md:flex-row gap-4 items-start">
+                                  <div className="flex-1 w-full">
+                                      <div className="flex justify-between items-start mb-2">
+                                          <div>
+                                              <div className="flex items-center gap-2">
+                                                  <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
+                                                  <button 
+                                                    onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} (신청지역)`)}
+                                                    className="text-xs bg-white text-gray-600 px-2 py-1 rounded hover:bg-gray-50 flex items-center gap-1 transition border border-yellow-200 shadow-sm"
+                                                    title="위치 확인"
+                                                  >
+                                                      <MapIcon size={12} /> 위치
+                                                  </button>
+                                              </div>
+                                              <p className="text-xs text-gray-500 mt-0.5">가입신청: 확인 필요</p>
+                                          </div>
+                                          <button 
+                                              onClick={() => handleApproveWorker(worker.uid)}
+                                              className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-brand-700 shadow-md transition whitespace-nowrap ml-2"
+                                          >
+                                              승인하기
+                                          </button>
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm text-gray-600 bg-white p-3 rounded-lg border border-yellow-100">
+                                          <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone}</div>
+                                          <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address}</div>
+                                          <div><strong>경력:</strong> {worker.experienceYears}년 / <strong>장비:</strong> {worker.equipmentCount || 1}대</div>
+                                          <div><strong>활동반경:</strong> {worker.maxDistance || 10}km</div>
+                                          
+                                          {worker.portfolioUrls && worker.portfolioUrls.length > 0 && (
+                                              <div className="col-span-1 md:col-span-2 mt-2">
+                                                  <strong className="block mb-1 text-xs">포트폴리오:</strong>
+                                                  <div className="flex gap-2 overflow-x-auto pb-1">
+                                                      {worker.portfolioUrls.map((url, i) => (
+                                                          <img 
+                                                            key={i} 
+                                                            src={url} 
+                                                            className="w-16 h-16 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-80"
+                                                            onClick={() => setSelectedWorkerForPortfolio(worker)}
+                                                            alt="work"
+                                                          />
+                                                      ))}
+                                                  </div>
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
                       </div>
                   </div>
-              ))}
-              {workers.length === 0 && (
-                <div className="text-center py-10 text-gray-500">
-                    등록된 반장님이 없습니다.
-                </div>
-            )}
+              )}
+
+              {/* Active Section */}
+              <div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                      <CheckCircle size={20} className="text-green-600"/> 활동 중 ({activeWorkers.length})
+                  </h3>
+                  <div className="space-y-4">
+                    {activeWorkers.map(worker => (
+                        <div key={worker.uid} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-start">
+                            <div className="bg-brand-50 p-3 rounded-full hidden md:block">
+                                <Users size={24} className="text-brand-600"/>
+                            </div>
+                            <div className="flex-1 w-full">
+                                <div className="flex items-center flex-wrap gap-2 mb-2">
+                                    <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
+                                    <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">승인됨</span>
+                                    <button 
+                                        onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
+                                        className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition border border-gray-200"
+                                    >
+                                        <MapIcon size={12} /> 위치보기
+                                    </button>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone}</div>
+                                    <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address}</div>
+                                    <div><strong>경력:</strong> {worker.experienceYears}년 / <strong>장비:</strong> {worker.equipmentCount || 1}대</div>
+                                    <div><strong>활동반경:</strong> {worker.maxDistance || 10}km</div>
+                                    <div className="col-span-1 md:col-span-2 text-gray-500 text-xs mt-1 bg-gray-50 p-2 rounded">{worker.bio}</div>
+                                </div>
+
+                                {worker.portfolioUrls && worker.portfolioUrls.length > 0 && (
+                                    <button 
+                                        onClick={() => setSelectedWorkerForPortfolio(worker)}
+                                        className="mt-2 text-xs text-brand-600 hover:underline flex items-center gap-1"
+                                    >
+                                        📷 작업 사진 보기 ({worker.portfolioUrls.length}장)
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {activeWorkers.length === 0 && !pendingWorkers.length && (
+                        <div className="text-center py-10 text-gray-500">
+                            등록된 반장님이 없습니다.
+                        </div>
+                    )}
+                  </div>
+              </div>
           </div>
       )}
 
@@ -254,6 +349,34 @@ const Admin: React.FC = () => {
                       <p className="mt-3 text-sm text-gray-600 bg-gray-100 p-2 rounded">
                           <span className="font-bold">주소/명칭:</span> {selectedMapLocation.name}
                       </p>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Portfolio Modal */}
+      {selectedWorkerForPortfolio && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="bg-white w-full max-w-2xl rounded-xl overflow-hidden shadow-2xl relative max-h-[90vh] flex flex-col">
+                  <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                      <h3 className="font-bold text-lg text-gray-800">
+                          {selectedWorkerForPortfolio.displayName}님의 포트폴리오
+                      </h3>
+                      <button onClick={() => setSelectedWorkerForPortfolio(null)} className="p-1 rounded-full hover:bg-gray-200 transition">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  <div className="p-4 overflow-y-auto bg-gray-100">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {selectedWorkerForPortfolio.portfolioUrls?.map((url, i) => (
+                              <div key={i} className="aspect-square rounded-lg overflow-hidden border border-gray-300 shadow-sm bg-white">
+                                  <img src={url} alt={`Portfolio ${i}`} className="w-full h-full object-cover hover:scale-105 transition duration-300" />
+                              </div>
+                          ))}
+                      </div>
+                      {(!selectedWorkerForPortfolio.portfolioUrls || selectedWorkerForPortfolio.portfolioUrls.length === 0) && (
+                          <div className="text-center py-10 text-gray-500">등록된 사진이 없습니다.</div>
+                      )}
                   </div>
               </div>
           </div>
