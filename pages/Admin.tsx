@@ -4,13 +4,21 @@ import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
+
+interface UserData {
+    uid: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    createdAt?: any;
+}
 
 const Admin: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'reservations' | 'workers'>('reservations');
+  const [activeTab, setActiveTab] = useState<'reservations' | 'workers' | 'users'>('reservations');
   
   // Reservations State
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -19,6 +27,9 @@ const Admin: React.FC = () => {
   // Workers State
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [selectedWorkerForPortfolio, setSelectedWorkerForPortfolio] = useState<WorkerProfile | null>(null);
+
+  // Users State
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== UserRole.ADMIN) {
@@ -40,9 +51,17 @@ const Admin: React.FC = () => {
         setWorkers(data);
     });
 
+    // Fetch All Users
+    const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
+        setAllUsers(data);
+    });
+
     return () => {
         unsubscribeRes();
         unsubscribeWork();
+        unsubscribeUsers();
     };
   }, [user, navigate]);
 
@@ -103,21 +122,28 @@ const Admin: React.FC = () => {
       </h1>
       
       {/* Tabs */}
-      <div className="flex gap-4 mb-6 border-b border-gray-200">
+      <div className="flex gap-4 mb-6 border-b border-gray-200 overflow-x-auto">
           <button 
             onClick={() => setActiveTab('reservations')}
-            className={`pb-3 px-2 flex items-center gap-2 font-bold transition ${activeTab === 'reservations' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'reservations' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
           >
               <ClipboardList size={20} />
               예약 관리 ({reservations.length})
           </button>
           <button 
             onClick={() => setActiveTab('workers')}
-            className={`pb-3 px-2 flex items-center gap-2 font-bold transition ${activeTab === 'workers' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'workers' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
           >
               <Users size={20} />
               반장님 관리 ({workers.length})
               {pendingWorkers.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{pendingWorkers.length}</span>}
+          </button>
+          <button 
+            onClick={() => setActiveTab('users')}
+            className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'users' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+              <UserIcon size={20} />
+              회원 관리 ({allUsers.length})
           </button>
       </div>
       
@@ -324,6 +350,49 @@ const Admin: React.FC = () => {
                     )}
                   </div>
               </div>
+          </div>
+      )}
+
+      {/* Users Tab */}
+      {activeTab === 'users' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+             <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm text-gray-600">
+                     <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                         <tr>
+                             <th className="p-4">이름</th>
+                             <th className="p-4">이메일</th>
+                             <th className="p-4">구분(Role)</th>
+                             <th className="p-4">가입일</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-100">
+                         {allUsers.map(user => (
+                             <tr key={user.uid} className="hover:bg-gray-50">
+                                 <td className="p-4 font-medium text-gray-900">{user.name}</td>
+                                 <td className="p-4">{user.email}</td>
+                                 <td className="p-4">
+                                     <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                         user.role === UserRole.ADMIN ? 'bg-red-100 text-red-700' :
+                                         user.role === UserRole.WORKER ? 'bg-green-100 text-green-700' :
+                                         'bg-gray-100 text-gray-600'
+                                     }`}>
+                                         {user.role}
+                                     </span>
+                                 </td>
+                                 <td className="p-4 text-xs">
+                                     {user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : '-'}
+                                 </td>
+                             </tr>
+                         ))}
+                         {allUsers.length === 0 && (
+                             <tr>
+                                 <td colSpan={4} className="p-8 text-center text-gray-400">회원 정보가 없습니다.</td>
+                             </tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
           </div>
       )}
 

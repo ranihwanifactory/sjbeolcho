@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, storage } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserRole, WorkerProfile } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
 import KakaoMap from '../components/KakaoMap';
-import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Briefcase, Camera } from 'lucide-react';
+import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Briefcase, Camera, ArrowRight, UserCheck, Wrench } from 'lucide-react';
 
 const WorkerSettings: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [converting, setConverting] = useState(false);
   
   const [profile, setProfile] = useState<Partial<WorkerProfile>>({
       displayName: '',
@@ -35,35 +36,56 @@ const WorkerSettings: React.FC = () => {
         navigate('/login');
         return;
     }
-    if (user.role !== UserRole.WORKER) {
-        alert("반장님(Worker) 계정만 접근할 수 있습니다.");
-        navigate('/');
-        return;
-    }
 
-    const fetchProfile = async () => {
-        try {
-            const docRef = doc(db, 'worker_profiles', user.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data() as WorkerProfile;
-                setProfile({
-                    ...data,
-                    // Ensure new fields have defaults if they don't exist in DB yet
-                    maxDistance: data.maxDistance || 10,
-                    equipmentCount: data.equipmentCount || 1,
-                    portfolioUrls: data.portfolioUrls || [],
-                    isApproved: data.isApproved || false
-                });
-            } else {
-                setProfile(prev => ({ ...prev, displayName: user.displayName }));
+    // Only fetch profile if worker. If Customer, we show the upgrade UI.
+    if (user.role === UserRole.WORKER) {
+        const fetchProfile = async () => {
+            try {
+                const docRef = doc(db, 'worker_profiles', user.uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data() as WorkerProfile;
+                    setProfile({
+                        ...data,
+                        // Ensure new fields have defaults if they don't exist in DB yet
+                        maxDistance: data.maxDistance || 10,
+                        equipmentCount: data.equipmentCount || 1,
+                        portfolioUrls: data.portfolioUrls || [],
+                        isApproved: data.isApproved || false
+                    });
+                } else {
+                    setProfile(prev => ({ ...prev, displayName: user.displayName }));
+                }
+            } catch (error) {
+                console.error("Error fetching profile", error);
             }
-        } catch (error) {
-            console.error("Error fetching profile", error);
-        }
-    };
-    fetchProfile();
+        };
+        fetchProfile();
+    }
   }, [user, navigate]);
+
+  const handleConvertToWorker = async () => {
+      if (!user) return;
+      if (!window.confirm("반장님으로 등록하시겠습니까?\n등록 후에는 관리자 승인을 거쳐 활동할 수 있습니다.")) return;
+
+      setConverting(true);
+      try {
+          // Update user role in Firestore
+          await updateDoc(doc(db, 'users', user.uid), {
+              role: UserRole.WORKER
+          });
+          
+          // Refresh local auth context
+          await refreshProfile();
+          
+          // User role should now be WORKER, triggering the useEffect above to fetch/init profile
+      } catch (error) {
+          console.error("Error converting to worker", error);
+          alert("전환 중 오류가 발생했습니다.");
+      } finally {
+          setConverting(false);
+      }
+  };
 
   const handleLocationSelect = (lat: number, lng: number, address: string) => {
     setProfile(prev => ({ ...prev, coordinates: { lat, lng }, address }));
@@ -144,6 +166,55 @@ const WorkerSettings: React.FC = () => {
     }
   };
 
+  // UI for Customers who want to upgrade
+  if (user?.role === UserRole.CUSTOMER) {
+      return (
+          <div className="max-w-md mx-auto py-10 px-4">
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-brand-100">
+                  <div className="bg-brand-600 p-6 text-white text-center">
+                      <Wrench size={48} className="mx-auto mb-4 text-brand-200" />
+                      <h1 className="text-2xl font-bold mb-2">반장님으로 지원하시겠습니까?</h1>
+                      <p className="text-brand-100 text-sm">성주 지역 벌초 전문가를 모십니다.</p>
+                  </div>
+                  <div className="p-8">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <UserCheck size={20} className="text-brand-600"/>
+                          반장님 혜택
+                      </h3>
+                      <ul className="space-y-3 text-sm text-gray-600 mb-8">
+                          <li className="flex items-start gap-2">
+                              <span className="text-brand-500 font-bold">✓</span>
+                              내 위치와 작업 반경을 지도에 홍보할 수 있습니다.
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-brand-500 font-bold">✓</span>
+                              고객과 실시간 채팅으로 견적 상담이 가능합니다.
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-brand-500 font-bold">✓</span>
+                              작업 포트폴리오를 관리하고 신뢰도를 높일 수 있습니다.
+                          </li>
+                      </ul>
+
+                      <button 
+                        onClick={handleConvertToWorker}
+                        disabled={converting}
+                        className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2 group"
+                      >
+                          {converting ? <Loader2 className="animate-spin"/> : null}
+                          {converting ? '처리 중...' : '지원서 작성하기'}
+                          {!converting && <ArrowRight size={18} className="group-hover:translate-x-1 transition" />}
+                      </button>
+                      <p className="text-center text-xs text-gray-400 mt-4">
+                          지원서를 작성하시면 관리자 승인 후 활동이 가능합니다.
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )
+  }
+
+  // UI for Workers (Existing Code)
   return (
     <div className="pb-10">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">반장님 프로필 설정</h1>

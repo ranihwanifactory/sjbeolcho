@@ -2,8 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, MapPin, Mail, CheckCircle, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star } from 'lucide-react';
 import '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../types.ts';
 
 const Home: React.FC = () => {
+  const { user } = useAuth();
+
   return (
     <div className="space-y-12 md:space-y-24">
       {/* Hero Section */}
@@ -56,7 +60,10 @@ const Home: React.FC = () => {
                   <p className="text-green-100 text-sm md:text-base">성주 지역 벌초 전문가이신가요? 젊은벌초와 함께 성장하세요.</p>
               </div>
           </div>
-          <Link to="/login" className="mt-6 md:mt-0 bg-white text-green-900 font-bold py-3 px-6 rounded-full hover:bg-green-50 transition shadow-lg flex items-center gap-2 whitespace-nowrap z-10">
+          <Link 
+            to={user ? "/worker-settings" : "/login"} 
+            className="mt-6 md:mt-0 bg-white text-green-900 font-bold py-3 px-6 rounded-full hover:bg-green-50 transition shadow-lg flex items-center gap-2 whitespace-nowrap z-10"
+          >
               반장님 지원하기 <ArrowRight size={18} />
           </Link>
       </div>

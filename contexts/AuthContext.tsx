@@ -11,6 +11,7 @@ interface AuthContextType {
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   signupWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -25,31 +26,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchUserData = async (firebaseUser: User) => {
+      // Check Firestore for user role
+      let role = UserRole.CUSTOMER;
+      
+      if (firebaseUser.email === ADMIN_EMAIL) {
+          role = UserRole.ADMIN;
+      } else {
+          // Try to fetch custom role from 'users' collection
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+              const data = userDoc.data();
+              if (data.role) role = data.role;
+          }
+      }
+
+      setUser({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        displayName: firebaseUser.displayName || '사용자',
+        photoURL: firebaseUser.photoURL || '',
+        role,
+      });
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Check Firestore for user role
-        let role = UserRole.CUSTOMER;
-        
-        if (firebaseUser.email === ADMIN_EMAIL) {
-            role = UserRole.ADMIN;
-        } else {
-            // Try to fetch custom role from 'users' collection
-            const userDocRef = doc(db, 'users', firebaseUser.uid);
-            const userDoc = await getDoc(userDocRef);
-            if (userDoc.exists()) {
-                const data = userDoc.data();
-                if (data.role) role = data.role;
-            }
-        }
-
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || '사용자',
-          photoURL: firebaseUser.photoURL || '',
-          role,
-        });
+        await fetchUserData(firebaseUser);
       } else {
         setUser(null);
       }
@@ -58,6 +63,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => unsubscribe();
   }, []);
+
+  const refreshProfile = async () => {
+      if (auth.currentUser) {
+          await fetchUserData(auth.currentUser);
+      }
+  };
 
   const loginWithGoogle = async () => {
     try {
@@ -73,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdAt: new Date()
         });
       }
+      await refreshProfile(); // Ensure role is loaded
     } catch (error) {
       console.error("Google Login failed", error);
       throw error;
@@ -102,8 +114,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role,
             createdAt: new Date()
         });
+        
+        // Force refresh to get the role
+        await fetchUserData(userCredential.user);
 
-        // Force local state update or rely on onAuthStateChanged
     } catch (error) {
         console.error("Signup failed", error);
         throw error;
@@ -115,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signupWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginWithEmail, signupWithEmail, logout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
