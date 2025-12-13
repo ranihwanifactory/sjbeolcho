@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, X, Star } from 'lucide-react';
-import { Reservation } from '../types.ts';
+import { Reservation } from '../types';
 
 interface CompletionModalProps {
   reservation: Reservation;

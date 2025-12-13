@@ -22,6 +22,11 @@ declare global {
   interface Window {
     kakao: any;
   }
+  namespace JSX {
+    interface IntrinsicElements {
+      [elemName: string]: any;
+    }
+  }
 }
 
 const KakaoMap: React.FC<KakaoMapProps> = ({ 

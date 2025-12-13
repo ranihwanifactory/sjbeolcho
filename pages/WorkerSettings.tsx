@@ -6,7 +6,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserRole, WorkerProfile } from '../types.ts';
 import { useNavigate } from 'react-router-dom';
 import KakaoMap from '../components/KakaoMap';
-import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Briefcase, Camera, ArrowRight, UserCheck, Wrench } from 'lucide-react';
+import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Briefcase, Camera, ArrowRight, UserCheck, Wrench, User } from 'lucide-react';
+import { updateProfile } from 'firebase/auth';
 
 const WorkerSettings: React.FC = () => {
   const { user, refreshProfile } = useAuth();
@@ -15,6 +16,9 @@ const WorkerSettings: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [converting, setConverting] = useState(false);
   
+  // Basic Info State (for all users)
+  const [basicName, setBasicName] = useState('');
+
   const [profile, setProfile] = useState<Partial<WorkerProfile>>({
       displayName: '',
       phone: '',
@@ -36,6 +40,7 @@ const WorkerSettings: React.FC = () => {
         navigate('/login');
         return;
     }
+    setBasicName(user.displayName || '');
 
     // Only fetch profile if worker. If Customer, we show the upgrade UI.
     if (user.role === UserRole.WORKER) {
@@ -63,6 +68,30 @@ const WorkerSettings: React.FC = () => {
         fetchProfile();
     }
   }, [user, navigate]);
+
+  const handleUpdateBasicInfo = async () => {
+      if(!user) return;
+      if(!basicName.trim()) {
+          alert("이름을 입력해주세요.");
+          return;
+      }
+      try {
+          // Update Firebase Auth Profile
+          if(user.uid) { // Check purely for type safety, user exists from hook
+            // We can't use `updateProfile` from `firebase/auth` directly with our custom `user` object.
+            // But we can update the 'users' collection document.
+            await updateDoc(doc(db, 'users', user.uid), {
+                name: basicName
+            });
+            // Also triggers context refresh if implemented deeply, but for now simple alert
+            alert("기본 정보가 수정되었습니다.");
+            refreshProfile();
+          }
+      } catch(e) {
+          console.error(e);
+          alert("수정 중 오류가 발생했습니다.");
+      }
+  };
 
   const handleConvertToWorker = async () => {
       if (!user) return;
@@ -166,10 +195,34 @@ const WorkerSettings: React.FC = () => {
     }
   };
 
-  // UI for Customers who want to upgrade
+  // UI for Customers who want to upgrade or edit basic info
   if (user?.role === UserRole.CUSTOMER) {
       return (
-          <div className="max-w-md mx-auto py-10 px-4">
+          <div className="max-w-md mx-auto py-10 px-4 space-y-8">
+              {/* Basic Info Edit for Customer */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <User size={20} className="text-gray-500"/> 내 정보 수정
+                  </h2>
+                  <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={basicName} 
+                        onChange={(e) => setBasicName(e.target.value)}
+                        className="flex-1 p-3 border border-gray-300 rounded-lg"
+                        placeholder="이름"
+                      />
+                      <button 
+                        onClick={handleUpdateBasicInfo}
+                        className="bg-gray-800 text-white px-4 rounded-lg text-sm font-bold whitespace-nowrap"
+                      >
+                          수정
+                      </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">이메일은 수정할 수 없습니다.</p>
+              </div>
+
+              {/* Worker Application */}
               <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-brand-100">
                   <div className="bg-brand-600 p-6 text-white text-center">
                       <Wrench size={48} className="mx-auto mb-4 text-brand-200" />
@@ -306,6 +359,7 @@ const WorkerSettings: React.FC = () => {
                 onLocationSelect={handleLocationSelect} 
                 initialLat={profile.coordinates?.lat}
                 initialLng={profile.coordinates?.lng}
+                circleRadius={profile.maxDistance ? profile.maxDistance * 1000 : 0} // Convert km to meters
               />
               {profile.address && (
                   <div className="mt-3 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">

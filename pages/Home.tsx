@@ -1,15 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, MapPin, Mail, CheckCircle, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star } from 'lucide-react';
-import '../types';
+import { Phone, MapPin, Mail, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { UserRole } from '../types.ts';
+import WorkersMap from './WorkersMap';
 
 const Home: React.FC = () => {
   const { user } = useAuth();
 
   return (
-    <div className="space-y-12 md:space-y-24">
+    <div className="space-y-12 md:space-y-20">
       {/* Hero Section */}
       <section className="relative rounded-3xl overflow-hidden shadow-2xl aspect-[4/3] md:aspect-[21/9] bg-gray-900 group">
         <div className="absolute inset-0">
@@ -48,6 +47,28 @@ const Home: React.FC = () => {
         </div>
       </section>
 
+      {/* Nationwide Workers Map */}
+      <section>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <Users className="text-brand-600"/> 벌초 반장님 현황
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                  전국 각지에서 활동 중인 검증된 반장님들을 확인하세요.
+              </p>
+            </div>
+            {!user && (
+              <Link to="/login" className="text-xs md:text-sm text-brand-600 font-bold hover:underline flex items-center gap-1">
+                  반장님 지원하기 <ArrowRight size={14}/>
+              </Link>
+            )}
+          </div>
+          <div className="bg-white p-1 rounded-2xl shadow-lg border border-gray-200">
+              <WorkersMap isEmbedded={true} />
+          </div>
+      </section>
+
       {/* Recruitment Banner */}
       <div className="bg-gradient-to-r from-green-900 to-green-800 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between text-white shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
@@ -61,36 +82,26 @@ const Home: React.FC = () => {
               </div>
           </div>
           <Link 
-            to={user ? "/worker-settings" : "/login"} 
+            to={user ? "/profile" : "/login"} 
             className="mt-6 md:mt-0 bg-white text-green-900 font-bold py-3 px-6 rounded-full hover:bg-green-50 transition shadow-lg flex items-center gap-2 whitespace-nowrap z-10"
           >
               반장님 지원하기 <ArrowRight size={18} />
           </Link>
       </div>
 
-      {/* Find Workers Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link to="/workers-map" className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm hover:shadow-md transition flex items-center gap-4 group">
-            <div className="bg-blue-50 text-blue-600 p-4 rounded-full group-hover:bg-blue-100 transition">
-                <Users size={28} />
-            </div>
-            <div>
-                <h4 className="text-lg font-bold text-gray-800">우리동네 반장 찾기</h4>
-                <p className="text-sm text-gray-500">지도에서 등록된 벌초 반장님들의 위치와 정보를 확인하세요.</p>
-            </div>
-            <ArrowRight size={20} className="ml-auto text-gray-300 group-hover:text-blue-600" />
-        </Link>
-        <Link to="/reviews" className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm hover:shadow-md transition flex items-center gap-4 group">
+      {/* Reviews Banner */}
+      <Link to="/reviews" className="block bg-white border border-gray-200 p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition group">
+        <div className="flex items-center gap-4">
             <div className="bg-yellow-50 text-yellow-600 p-4 rounded-full group-hover:bg-yellow-100 transition">
-                <Star size={28} />
+                <Star size={32} />
             </div>
             <div>
-                <h4 className="text-lg font-bold text-gray-800">생생한 이용 후기</h4>
-                <p className="text-sm text-gray-500">실제 고객님들의 만족스러운 후기를 확인해보세요.</p>
+                <h4 className="text-xl font-bold text-gray-800">생생한 이용 후기</h4>
+                <p className="text-gray-500">실제 고객님들의 만족스러운 후기를 확인해보세요.</p>
             </div>
-            <ArrowRight size={20} className="ml-auto text-gray-300 group-hover:text-yellow-600" />
-        </Link>
-      </div>
+            <ArrowRight size={24} className="ml-auto text-gray-300 group-hover:text-yellow-600" />
+        </div>
+      </Link>
 
       {/* Process Section */}
       <section className="bg-brand-50 rounded-3xl p-8 md:p-16 relative overflow-hidden">
@@ -167,7 +178,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Company Info Box (Mobile style detail, clearer on desktop) */}
+      {/* Company Info Box */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 md:p-8">
         <h2 className="text-lg font-bold text-gray-900 mb-4 border-b pb-2">업체 상세 정보</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

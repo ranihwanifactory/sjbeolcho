@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Mail, Lock, User, AlertCircle, Wrench } from 'lucide-react';
-import { UserRole } from '../types.ts';
+import { UserRole } from '../types';
 
 const Login: React.FC = () => {
   const { user, loginWithGoogle, loginWithEmail, signupWithEmail } = useAuth();

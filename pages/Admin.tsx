@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
-import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types.ts';
+import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
@@ -92,6 +92,17 @@ const Admin: React.FC = () => {
           }
       }
   };
+
+  const handleChangeRole = async (uid: string, newRole: UserRole) => {
+      if(window.confirm(`이 사용자의 권한을 ${newRole}(으)로 변경하시겠습니까?`)) {
+          try {
+              await updateDoc(doc(db, 'users', uid), { role: newRole });
+          } catch(error) {
+              console.error(error);
+              alert("권한 변경 중 오류가 발생했습니다.");
+          }
+      }
+  }
 
   const openMapModal = (lat: number, lng: number, name: string) => {
       if (lat && lng) {
@@ -372,13 +383,18 @@ const Admin: React.FC = () => {
                                  <td className="p-4 font-medium text-gray-900">{user.name}</td>
                                  <td className="p-4">{user.email}</td>
                                  <td className="p-4">
-                                     <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                     <select 
+                                        value={user.role} 
+                                        onChange={(e) => handleChangeRole(user.uid, e.target.value as UserRole)}
+                                        className={`px-2 py-1 rounded text-xs font-bold border border-gray-300 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer ${
                                          user.role === UserRole.ADMIN ? 'bg-red-100 text-red-700' :
                                          user.role === UserRole.WORKER ? 'bg-green-100 text-green-700' :
                                          'bg-gray-100 text-gray-600'
                                      }`}>
-                                         {user.role}
-                                     </span>
+                                         <option value={UserRole.CUSTOMER}>일반 (Customer)</option>
+                                         <option value={UserRole.WORKER}>반장 (Worker)</option>
+                                         <option value={UserRole.ADMIN}>관리자 (Admin)</option>
+                                     </select>
                                  </td>
                                  <td className="p-4 text-xs">
                                      {user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : '-'}

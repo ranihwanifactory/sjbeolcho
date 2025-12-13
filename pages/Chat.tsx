@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, limit } from 'firebase/firestore';
-import { ChatMessage, UserRole } from '../types.ts';
+import { ChatMessage, UserRole } from '../types';
 import { Send, User as UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

@@ -5,7 +5,7 @@ import KakaoMap from '../components/KakaoMap';
 import { db, storage } from '../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { ReservationStatus } from '../types.ts';
+import { ReservationStatus } from '../types';
 import { Loader2, Upload } from 'lucide-react';
 
 const Reservation: React.FC = () => {

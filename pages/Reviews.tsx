@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db, storage } from '../services/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Review, UserRole } from '../types.ts';
+import { Review, UserRole } from '../types';
 import { Star, Upload, X, PenTool, Loader2, MoreHorizontal, Trash2, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

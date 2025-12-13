@@ -10,7 +10,7 @@ import Reviews from './pages/Reviews';
 import WorkerSettings from './pages/WorkerSettings';
 import WorkersMap from './pages/WorkersMap';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { UserRole } from './types.ts';
+import { UserRole } from './types';
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -57,12 +57,16 @@ const AppRoutes = () => {
                     element={<WorkersMap />} 
                 />
                 <Route 
-                    path="/worker-settings" 
+                    path="/profile" 
                     element={
                         <PrivateRoute>
                             <WorkerSettings />
                         </PrivateRoute>
                     } 
+                />
+                <Route 
+                    path="/worker-settings" 
+                    element={<Navigate to="/profile" />} 
                 />
                 <Route 
                     path="/admin" 

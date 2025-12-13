@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin, Users, Settings } from 'lucide-react';
+import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin, Users, Settings, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { UserRole, Reservation, ReservationStatus } from '../types.ts';
+import { UserRole, Reservation, ReservationStatus } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import CompletionModal from './CompletionModal';
@@ -86,14 +86,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const navItems = [
     { path: '/', label: '홈', icon: <Home size={20} /> },
-    { path: '/workers-map', label: '우리동네 반장', icon: <Users size={20} /> },
     { path: '/reserve', label: '예약하기', icon: <CalendarPlus size={20} /> },
     { path: '/reviews', label: '이용후기', icon: <Star size={20} /> },
   ];
 
-  if (user?.role === UserRole.WORKER) {
-    navItems.push({ path: '/worker-settings', label: '내 프로필', icon: <Settings size={20} /> });
-  }
+  // Everyone gets a profile menu
+  navItems.push({ path: '/profile', label: '프로필', icon: <User size={20} /> });
 
   if (user?.role === UserRole.ADMIN) {
     navItems.push({ path: '/admin', label: '관리자', icon: <Shield size={20} /> });
