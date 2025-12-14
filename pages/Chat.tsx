@@ -15,6 +15,7 @@ const Chat: React.FC = () => {
   const [chatUsers, setChatUsers] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) {
@@ -104,6 +105,12 @@ const Chat: React.FC = () => {
             isRead: false
         });
         setNewMessage('');
+        
+        // Keep focus on input
+        setTimeout(() => {
+            inputRef.current?.focus();
+        }, 0);
+
     } catch (error) {
         console.error("Error sending message", error);
         alert("메시지 전송 실패");
@@ -184,6 +191,7 @@ const Chat: React.FC = () => {
 
       <form onSubmit={handleSend} className="bg-white p-3 border-t border-gray-200 flex gap-2 rounded-b-xl shadow-lg">
         <input
+          ref={inputRef}
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
