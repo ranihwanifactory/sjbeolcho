@@ -97,6 +97,21 @@ const Admin: React.FC = () => {
       }
   };
 
+  const handleRevokeWorker = async (workerId: string) => {
+      if (window.confirm("이 반장님의 승인을 취소하시겠습니까?\n취소 시 사용자 권한이 '일반(CUSTOMER)'로 변경되고 지도에서 숨겨집니다.")) {
+          try {
+              // 1. Unapprove the worker profile
+              await updateDoc(doc(db, 'worker_profiles', workerId), { isApproved: false });
+              // 2. Downgrade the user role in users collection
+              await updateDoc(doc(db, 'users', workerId), { role: UserRole.CUSTOMER });
+              alert("승인이 취소되었습니다. 대기 목록으로 이동합니다.");
+          } catch (error) {
+              console.error(error);
+              alert("처리 중 오류가 발생했습니다.");
+          }
+      }
+  };
+
   const handleChangeRole = async (uid: string, newRole: UserRole) => {
       // Prevent changing own role if you are the current admin
       if (uid === user?.uid) {
@@ -342,14 +357,22 @@ const Admin: React.FC = () => {
                                 <Users size={24} className="text-brand-600"/>
                             </div>
                             <div className="flex-1 w-full">
-                                <div className="flex items-center flex-wrap gap-2 mb-2">
-                                    <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
-                                    <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">승인됨</span>
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center flex-wrap gap-2">
+                                        <h3 className="font-bold text-lg text-gray-800">{worker.displayName}</h3>
+                                        <span className="text-xs text-green-700 font-bold bg-green-100 px-2 py-0.5 rounded-full">승인됨</span>
+                                        <button 
+                                            onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
+                                            className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition border border-gray-200"
+                                        >
+                                            <MapIcon size={12} /> 위치보기
+                                        </button>
+                                    </div>
                                     <button 
-                                        onClick={() => openMapModal(worker.coordinates.lat, worker.coordinates.lng, `${worker.displayName} 반장님 활동지`)}
-                                        className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 flex items-center gap-1 transition border border-gray-200"
+                                        onClick={() => handleRevokeWorker(worker.uid)}
+                                        className="text-xs border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded transition whitespace-nowrap ml-2"
                                     >
-                                        <MapIcon size={12} /> 위치보기
+                                        승인 취소
                                     </button>
                                 </div>
                                 
