@@ -81,8 +81,9 @@ const WorkersMap: React.FC<WorkersMapProps> = ({ isEmbedded = false }) => {
     setMarkers(newMarkers);
   }, [workers]);
 
+  // Height adjustment: Mobile 350px, Desktop 500px for embedded mode
   return (
-    <div className={`flex flex-col ${isEmbedded ? 'h-[500px]' : 'pb-10 h-[calc(100vh-100px)]'}`}>
+    <div className={`flex flex-col ${isEmbedded ? 'h-[350px] md:h-[500px]' : 'pb-10 h-[calc(100vh-100px)]'}`}>
       {!isEmbedded && (
           <div className="mb-4 flex justify-between items-end">
             <div>
