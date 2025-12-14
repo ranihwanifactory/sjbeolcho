@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, where, limit } from 'firebase/firestore';
 import { ChatMessage, UserRole } from '../types';
-import { Send, User as UserIcon } from 'lucide-react';
+import { Send, User as UserIcon, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Chat: React.FC = () => {
@@ -13,6 +13,7 @@ const Chat: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [chatUsers, setChatUsers] = useState<any[]>([]);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +22,8 @@ const Chat: React.FC = () => {
         return;
     }
 
-    if (user.role === UserRole.CUSTOMER) {
+    // 관리자가 아닌 경우(고객 또는 반장), 자신의 ID로 채팅방 설정
+    if (user.role !== UserRole.ADMIN) {
       setSelectedUserId(user.uid);
     }
   }, [user, navigate]);
@@ -29,8 +31,6 @@ const Chat: React.FC = () => {
   // Admin: Fetch list of users who have chatted
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
-        // Fetch recent chats to find unique users. 
-        // We order by createdAt desc to get latest. This usually works without composite index if no where clause.
         const q = query(collection(db, 'chats'), orderBy('createdAt', 'desc'), limit(100));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const usersMap = new Map();
@@ -38,7 +38,6 @@ const Chat: React.FC = () => {
                 const data = doc.data();
                 const uid = data.roomId; // roomId is essentially the customer's UID
                 if (uid && !usersMap.has(uid)) {
-                    // Try to use the senderName if available, otherwise fallback
                     const displayName = data.senderId === uid ? data.senderName : (usersMap.get(uid)?.name || 'Unknown');
                     usersMap.set(uid, { id: uid, name: displayName, lastMsg: data.text });
                 }
@@ -51,12 +50,10 @@ const Chat: React.FC = () => {
 
   // Fetch Messages for the selected room
   useEffect(() => {
-    if (!selectedUserId) return; // Wait for selection
+    if (!selectedUserId) return;
 
     const roomId = selectedUserId;
     
-    // FIX: Removing 'orderBy' from the query to avoid "Missing Index" error on Firestore.
-    // We will sort the messages in memory (JavaScript) instead.
     const q = query(
         collection(db, 'chats'), 
         where('roomId', '==', roomId)
@@ -68,12 +65,11 @@ const Chat: React.FC = () => {
           return { 
               id: doc.id, 
               ...data,
-              // Handle potential null 'createdAt' (optimistic UI) by falling back to now
               createdAt: data.createdAt || { seconds: Date.now() / 1000, nanoseconds: 0 } 
           } as ChatMessage
       });
 
-      // Sort in memory by time ascending
+      // Sort by time ascending
       msgs.sort((a, b) => {
           const timeA = a.createdAt.seconds;
           const timeB = b.createdAt.seconds;
@@ -93,9 +89,10 @@ const Chat: React.FC = () => {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !selectedUserId) return;
+    if (!newMessage.trim() || !user || !selectedUserId || sending) return;
     
     const roomId = selectedUserId;
+    setSending(true);
 
     try {
         await addDoc(collection(db, 'chats'), {
@@ -107,11 +104,18 @@ const Chat: React.FC = () => {
             isRead: false
         });
         setNewMessage('');
-        // We don't need to manually update state, onSnapshot will pick it up
     } catch (error) {
         console.error("Error sending message", error);
         alert("메시지 전송 실패");
+    } finally {
+        setSending(false);
     }
+  };
+
+  const formatTime = (timestamp: any) => {
+      if (!timestamp || !timestamp.seconds) return '';
+      const date = new Date(timestamp.seconds * 1000);
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   };
 
   // ADMIN VIEW: Select User
@@ -140,14 +144,15 @@ const Chat: React.FC = () => {
       )
   }
 
+  // Adjusted height calculation for mobile with bottom nav
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100vh-180px)] md:h-[calc(100vh-150px)]">
       {user?.role === UserRole.ADMIN && (
           <div className="flex items-center gap-2 mb-2">
-             <button onClick={() => setSelectedUserId(null)} className="text-sm text-gray-500 hover:text-brand-600 flex items-center">
+             <button onClick={() => setSelectedUserId(null)} className="text-sm bg-gray-100 px-3 py-1.5 rounded-lg text-gray-700 hover:bg-gray-200 flex items-center font-bold transition">
                  &larr; 목록으로
              </button>
-             <span className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-700">
+             <span className="text-sm font-bold text-gray-700 ml-1">
                  {chatUsers.find(u => u.id === selectedUserId)?.name || '고객'}님과의 대화
              </span>
           </div>
@@ -155,17 +160,22 @@ const Chat: React.FC = () => {
       
       <div className="flex-1 bg-white rounded-t-xl shadow-inner overflow-y-auto p-4 space-y-4 border border-gray-200">
         {messages.length === 0 && (
-            <div className="text-center text-gray-400 mt-10">
-                <p>문의사항을 남겨주시면<br/>관리자가 확인 후 답변드립니다.</p>
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-60">
+                <UserIcon size={48} className="mb-2 bg-gray-100 p-3 rounded-full"/>
+                <p className="text-sm">문의하실 내용을 남겨주세요.</p>
+                <p className="text-xs">관리자가 확인 후 답변드립니다.</p>
             </div>
         )}
         {messages.map((msg) => {
           const isMe = msg.senderId === user?.uid;
           return (
-            <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-brand-500 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
+            <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+              <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm shadow-sm leading-relaxed ${isMe ? 'bg-brand-500 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none'}`}>
                 {msg.text}
               </div>
+              <span className="text-[10px] text-gray-400 mt-1 px-1">
+                  {formatTime(msg.createdAt)}
+              </span>
             </div>
           );
         })}
@@ -178,10 +188,15 @@ const Chat: React.FC = () => {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="메시지를 입력하세요..."
-          className="flex-1 px-4 py-2 bg-gray-50 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+          disabled={sending}
+          className="flex-1 px-4 py-3 bg-gray-50 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm disabled:opacity-50"
         />
-        <button type="submit" className="bg-brand-600 text-white p-2 rounded-full hover:bg-brand-700 transition shadow-md">
-          <Send size={20} />
+        <button 
+            type="submit" 
+            disabled={sending || !newMessage.trim()}
+            className="bg-brand-600 text-white p-3 rounded-full hover:bg-brand-700 transition shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center min-w-[44px]"
+        >
+          {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
         </button>
       </form>
     </div>
