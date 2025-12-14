@@ -83,9 +83,13 @@ const Admin: React.FC = () => {
   };
 
   const handleApproveWorker = async (workerId: string) => {
-      if (window.confirm("이 반장님을 승인하시겠습니까?\n승인 시 지도에 즉시 노출됩니다.")) {
+      if (window.confirm("이 반장님을 승인하시겠습니까?\n승인 시 사용자 권한이 '반장(WORKER)'로 변경되고 지도에 노출됩니다.")) {
           try {
+              // 1. Approve the worker profile
               await updateDoc(doc(db, 'worker_profiles', workerId), { isApproved: true });
+              // 2. Upgrade the user role in users collection
+              await updateDoc(doc(db, 'users', workerId), { role: UserRole.WORKER });
+              alert("승인 및 등급 변경이 완료되었습니다.");
           } catch (error) {
               console.error(error);
               alert("승인 처리 중 오류가 발생했습니다.");
@@ -94,9 +98,23 @@ const Admin: React.FC = () => {
   };
 
   const handleChangeRole = async (uid: string, newRole: UserRole) => {
-      if(window.confirm(`이 사용자의 권한을 ${newRole}(으)로 변경하시겠습니까?`)) {
+      // Prevent changing own role if you are the current admin
+      if (uid === user?.uid) {
+          alert("자신의 관리자 권한은 변경할 수 없습니다.");
+          return;
+      }
+
+      if(window.confirm(`이 사용자의 권한을 '${newRole}'(으)로 변경하시겠습니까?`)) {
           try {
               await updateDoc(doc(db, 'users', uid), { role: newRole });
+              // If demoting a worker to customer, we might want to un-approve their profile, but let's keep it simple for now.
+              if (newRole === UserRole.CUSTOMER) {
+                  // Optionally check if they have a worker profile and set approved to false
+                  // Not strictly required but good for consistency
+                  try {
+                    await updateDoc(doc(db, 'worker_profiles', uid), { isApproved: false });
+                  } catch(e) { /* Ignore if profile doesn't exist */ }
+              }
           } catch(error) {
               console.error(error);
               alert("권한 변경 중 오류가 발생했습니다.");
@@ -283,8 +301,8 @@ const Admin: React.FC = () => {
                                           </button>
                                       </div>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm text-gray-600 bg-white p-3 rounded-lg border border-yellow-100">
-                                          <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone}</div>
-                                          <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address}</div>
+                                          <div className="flex items-center gap-2"><Phone size={14}/> {worker.phone || '미입력'}</div>
+                                          <div className="flex items-center gap-2"><MapPin size={14}/> {worker.address || '미지정'}</div>
                                           <div><strong>경력:</strong> {worker.experienceYears}년 / <strong>장비:</strong> {worker.equipmentCount || 1}대</div>
                                           <div><strong>활동반경:</strong> {worker.maxDistance || 10}km</div>
                                           
@@ -384,7 +402,7 @@ const Admin: React.FC = () => {
                                  <td className="p-4">{user.email}</td>
                                  <td className="p-4">
                                      <select 
-                                        value={user.role} 
+                                        value={user.role || UserRole.CUSTOMER} 
                                         onChange={(e) => handleChangeRole(user.uid, e.target.value as UserRole)}
                                         className={`px-2 py-1 rounded text-xs font-bold border border-gray-300 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer ${
                                          user.role === UserRole.ADMIN ? 'bg-red-100 text-red-700' :

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, storage } from '../services/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import KakaoMap from '../components/KakaoMap';
-import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Briefcase, Camera, ArrowRight, UserCheck, Wrench, User, Edit2 } from 'lucide-react';
+import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Camera, ArrowRight, UserCheck, Wrench, User, Edit2, Clock } from 'lucide-react';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../services/firebase';
 
@@ -20,6 +20,9 @@ const WorkerSettings: React.FC = () => {
   
   // Basic Info State (for all users)
   const [basicName, setBasicName] = useState('');
+  
+  // State to track if a customer has already applied
+  const [hasApplied, setHasApplied] = useState(false);
 
   const [profile, setProfile] = useState<Partial<WorkerProfile>>({
       displayName: '',
@@ -44,36 +47,38 @@ const WorkerSettings: React.FC = () => {
     }
     setBasicName(user.displayName || '');
 
-    // Fetch Worker Profile if user is a worker
-    if (user.role === UserRole.WORKER) {
-        const fetchProfile = async () => {
-            try {
-                const docRef = doc(db, 'worker_profiles', user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data() as WorkerProfile;
-                    setProfile({
-                        ...data,
-                        // Ensure new fields have defaults if they don't exist in DB yet
-                        maxDistance: data.maxDistance || 10,
-                        equipmentCount: data.equipmentCount || 1,
-                        portfolioUrls: data.portfolioUrls || [],
-                        isApproved: data.isApproved || false
-                    });
-                } else {
-                    setProfile(prev => ({ 
-                        ...prev, 
-                        displayName: user.displayName,
-                        // Ensure coordinates default to something valid if not set
-                        coordinates: prev.coordinates || { lat: 35.919069, lng: 128.283038 }
-                    }));
-                }
-            } catch (error) {
-                console.error("Error fetching profile", error);
+    // Fetch Worker Profile for ALL users to check application status
+    const fetchProfile = async () => {
+        try {
+            const docRef = doc(db, 'worker_profiles', user.uid);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                const data = docSnap.data() as WorkerProfile;
+                setHasApplied(true);
+                setProfile({
+                    ...data,
+                    // Ensure new fields have defaults if they don't exist in DB yet
+                    maxDistance: data.maxDistance || 10,
+                    equipmentCount: data.equipmentCount || 1,
+                    portfolioUrls: data.portfolioUrls || [],
+                    isApproved: data.isApproved || false
+                });
+            } else {
+                setHasApplied(false);
+                setProfile(prev => ({ 
+                    ...prev, 
+                    displayName: user.displayName,
+                    // Ensure coordinates default to something valid if not set
+                    coordinates: prev.coordinates || { lat: 35.919069, lng: 128.283038 }
+                }));
             }
-        };
-        fetchProfile();
-    }
+        } catch (error) {
+            console.error("Error fetching profile", error);
+        }
+    };
+    fetchProfile();
+    
   }, [user, navigate]);
 
   const handleUpdateBasicInfo = async () => {
@@ -90,10 +95,10 @@ const WorkerSettings: React.FC = () => {
                 displayName: basicName
             });
             
-            // Update users collection
-            await updateDoc(doc(db, 'users', user.uid), {
+            // Update users collection (Merge true to be safe)
+            await setDoc(doc(db, 'users', user.uid), {
                 name: basicName
-            });
+            }, { merge: true });
 
             // Update local context
             await refreshProfile();
@@ -109,22 +114,37 @@ const WorkerSettings: React.FC = () => {
 
   const handleConvertToWorker = async () => {
       if (!user) return;
-      if (!window.confirm("반장님으로 등록하시겠습니까?\n등록 후에는 관리자 승인을 거쳐 활동할 수 있습니다.")) return;
+      if (!window.confirm("반장님으로 등록하시겠습니까?\n등록하신 정보는 관리자 검토 후 승인됩니다.")) return;
 
       setConverting(true);
       try {
-          // Use setDoc with merge:true to create doc if missing (robustness)
-          await setDoc(doc(db, 'users', user.uid), {
-              role: UserRole.WORKER
-          }, { merge: true });
+          // 1. Create the worker profile document explicitly (Pending state)
+          // We DO NOT change the user role to WORKER here. Admin will do it upon approval.
+          const initialProfile = {
+              uid: user.uid,
+              displayName: user.displayName || basicName,
+              phone: '', // User needs to fill this later or we can prompt now, but simplicity first
+              bio: '신규 지원자입니다.',
+              address: '',
+              coordinates: { lat: 35.919069, lng: 128.283038 },
+              experienceYears: 1,
+              isAvailable: true,
+              maxDistance: 10,
+              equipmentCount: 1,
+              portfolioUrls: [],
+              isApproved: false // Explicitly false
+          };
           
-          // Refresh local auth context
-          await refreshProfile();
+          await setDoc(doc(db, 'worker_profiles', user.uid), initialProfile);
           
-          // User role should now be WORKER, triggering the useEffect above to fetch/init profile
+          setHasApplied(true);
+          setProfile(initialProfile);
+          
+          alert("지원서가 접수되었습니다.\n상세 프로필(연락처, 작업지역 등)을 입력해주시면 심사가 진행됩니다.");
+
       } catch (error) {
           console.error("Error converting to worker", error);
-          alert("전환 중 오류가 발생했습니다.");
+          alert("신청 중 오류가 발생했습니다.");
       } finally {
           setConverting(false);
       }
@@ -161,6 +181,10 @@ const WorkerSettings: React.FC = () => {
         alert("활동 거점을 지도에서 선택해주세요. (지도에 마커가 표시되어야 합니다)");
         return;
     }
+    if (!profile.phone) {
+        alert("연락처를 입력해주세요.");
+        return;
+    }
 
     setLoading(true);
 
@@ -184,7 +208,7 @@ const WorkerSettings: React.FC = () => {
             ...profile,
             portfolioUrls: newPortfolioUrls,
             updatedAt: new Date(),
-            // Keep approval status if already approved, otherwise false
+            // Ensure approval status cannot be set by user
             isApproved: profile.isApproved === true
         };
 
@@ -195,7 +219,7 @@ const WorkerSettings: React.FC = () => {
         setProfile(updatedProfile);
 
         if (!updatedProfile.isApproved) {
-            alert("프로필이 저장되었습니다.\n관리자 승인 후 '우리동네 반장' 지도에 노출됩니다.");
+            alert("정보가 저장되었습니다.\n관리자 승인 대기 중입니다.");
         } else {
             alert("정보가 수정되었습니다.");
         }
@@ -208,6 +232,11 @@ const WorkerSettings: React.FC = () => {
         setUploading(false);
     }
   };
+
+  // Condition to show "Edit Form": 
+  // 1. Role is WORKER (Already approved)
+  // 2. OR Role is CUSTOMER but hasApplied (Pending Application - allow them to fill details)
+  const showWorkerForm = user?.role === UserRole.WORKER || hasApplied;
 
   return (
     <div className="max-w-4xl mx-auto pb-10">
@@ -263,8 +292,8 @@ const WorkerSettings: React.FC = () => {
 
       {/* --- Section 2: Role Specific Content --- */}
       
-      {/* 2-A: Customer View -> Upgrade Banner */}
-      {user?.role === UserRole.CUSTOMER && (
+      {/* 2-A: Customer View -> Upgrade Banner (Only if NOT applied yet) */}
+      {user?.role === UserRole.CUSTOMER && !hasApplied && (
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-brand-100">
               <div className="bg-brand-600 p-6 text-white text-center">
                   <Wrench size={48} className="mx-auto mb-4 text-brand-200" />
@@ -307,22 +336,28 @@ const WorkerSettings: React.FC = () => {
           </div>
       )}
 
-      {/* 2-B: Worker View -> Worker Settings Form */}
-      {user?.role === UserRole.WORKER && (
+      {/* 2-B: Worker View / Applied View -> Worker Settings Form */}
+      {showWorkerForm && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h2 className="font-bold text-lg mb-6 flex items-center gap-2 pb-4 border-b">
                 <Wrench size={20} className="text-brand-600"/> 반장님 활동 설정
             </h2>
 
-            {profile.isApproved ? (
+            {user?.role === UserRole.WORKER ? (
                 <div className="bg-green-50 text-green-700 px-4 py-2 rounded-lg mb-6 border border-green-200 flex items-center gap-2">
-                    <span className="font-bold">✓ 승인됨</span>
+                    <span className="font-bold">✓ 승인 완료</span>
                     <span className="text-sm">현재 지도에 정상적으로 노출되고 있습니다.</span>
                 </div>
             ) : (
-                <div className="bg-yellow-50 text-yellow-700 px-4 py-3 rounded-lg mb-6 border border-yellow-200">
-                    <p className="font-bold mb-1">⚠ 승인 대기 중</p>
-                    <p className="text-sm">필수 정보를 모두 입력하고 저장하시면, 관리자가 검토 후 승인해 드립니다.</p>
+                <div className="bg-yellow-50 text-yellow-800 px-5 py-4 rounded-lg mb-6 border border-yellow-200 shadow-sm">
+                    <div className="flex items-center gap-2 font-bold mb-1 text-yellow-900">
+                        <Clock size={20} />
+                        심사 진행 중 (승인 대기)
+                    </div>
+                    <p className="text-sm leading-relaxed">
+                        지원서가 접수되었습니다. 아래 활동 정보를 꼼꼼히 입력해주시면 빠른 승인이 가능합니다.<br/>
+                        승인이 완료되면 자동으로 '반장' 등급으로 변경됩니다.
+                    </p>
                 </div>
             )}
 
