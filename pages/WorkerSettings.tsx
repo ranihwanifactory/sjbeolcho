@@ -61,7 +61,12 @@ const WorkerSettings: React.FC = () => {
                         isApproved: data.isApproved || false
                     });
                 } else {
-                    setProfile(prev => ({ ...prev, displayName: user.displayName }));
+                    setProfile(prev => ({ 
+                        ...prev, 
+                        displayName: user.displayName,
+                        // Ensure coordinates default to something valid if not set
+                        coordinates: prev.coordinates || { lat: 35.919069, lng: 128.283038 }
+                    }));
                 }
             } catch (error) {
                 console.error("Error fetching profile", error);
@@ -108,10 +113,10 @@ const WorkerSettings: React.FC = () => {
 
       setConverting(true);
       try {
-          // Update user role in Firestore
-          await updateDoc(doc(db, 'users', user.uid), {
+          // Use setDoc with merge:true to create doc if missing (robustness)
+          await setDoc(doc(db, 'users', user.uid), {
               role: UserRole.WORKER
-          });
+          }, { merge: true });
           
           // Refresh local auth context
           await refreshProfile();
@@ -153,7 +158,7 @@ const WorkerSettings: React.FC = () => {
     e.preventDefault();
     if (!user) return;
     if (!profile.address) {
-        alert("활동 거점을 지도에서 선택해주세요.");
+        alert("활동 거점을 지도에서 선택해주세요. (지도에 마커가 표시되어야 합니다)");
         return;
     }
 

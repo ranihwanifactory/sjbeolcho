@@ -131,6 +131,21 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
                     circleRef.current = circle;
                 }
 
+                // Initial Reverse Geocode if not read-only and callback exists
+                if (!readOnly && onLocationSelect) {
+                    const geocoder = new window.kakao.maps.services.Geocoder();
+                    geocoder.coord2Address(centerLng, centerLat, (result: any, status: any) => {
+                         if (status === window.kakao.maps.services.Status.OK) {
+                            const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
+                            setAddress(addr);
+                            // Only call callback if we are initializing, but be careful of infinite loops in parent
+                            // It's safer to just set local state, but parent needs it. 
+                            // We call it here to ensure parent state (e.g. address string) is synced with default marker.
+                            onLocationSelect(centerLat, centerLng, addr);
+                        }
+                    });
+                }
+
                 if (!readOnly) {
                     // Click event to move marker
                     window.kakao.maps.event.addListener(createdMap, 'click', (mouseEvent: any) => {

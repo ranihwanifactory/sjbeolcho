@@ -1,5 +1,14 @@
 import { Timestamp } from 'firebase/firestore';
 
+// Define JSX.IntrinsicElements globally
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [elemName: string]: any;
+    }
+  }
+}
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   CUSTOMER = 'CUSTOMER',
