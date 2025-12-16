@@ -9,6 +9,9 @@ import Admin from './pages/Admin';
 import Reviews from './pages/Reviews';
 import WorkerSettings from './pages/WorkerSettings';
 import WorkersMap from './pages/WorkersMap';
+import NoticeList from './pages/NoticeList';
+import NoticeWrite from './pages/NoticeWrite';
+import NoticeDetail from './pages/NoticeDetail';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserRole } from './types';
 
@@ -68,6 +71,19 @@ const AppRoutes = () => {
                     path="/worker-settings" 
                     element={<Navigate to="/profile" />} 
                 />
+                
+                {/* Notice Board Routes */}
+                <Route path="/notices" element={<NoticeList />} />
+                <Route path="/notices/:id" element={<NoticeDetail />} />
+                <Route 
+                    path="/notices/new" 
+                    element={
+                        <AdminRoute>
+                            <NoticeWrite />
+                        </AdminRoute>
+                    } 
+                />
+
                 <Route 
                     path="/admin" 
                     element={

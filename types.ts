@@ -1,13 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      [elemName: string]: any;
-    }
-  }
-}
-
 export enum UserRole {
   ADMIN = 'ADMIN',
   CUSTOMER = 'CUSTOMER',
@@ -89,5 +81,24 @@ export interface Review {
   rating: number;
   text: string;
   photoUrl?: string;
+  createdAt: Timestamp;
+}
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  createdAt: Timestamp;
+  viewCount: number;
+}
+
+export interface NoticeComment {
+  id: string;
+  noticeId: string;
+  userId: string;
+  userName: string;
+  text: string;
   createdAt: Timestamp;
 }

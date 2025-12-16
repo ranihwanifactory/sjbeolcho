@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin, Users, Settings, User } from 'lucide-react';
+import { Home, CalendarPlus, MessageCircle, LogOut, Share2, Shield, Star, Menu, Phone, Mail, MapPin, Users, Settings, User, Megaphone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole, Reservation, ReservationStatus } from '../types';
 import { db } from '../services/firebase';
@@ -87,6 +87,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navItems = [
     { path: '/', label: '홈', icon: <Home size={20} /> },
     { path: '/reserve', label: '예약하기', icon: <CalendarPlus size={20} /> },
+    { path: '/notices', label: '공지사항', icon: <Megaphone size={20} /> },
     { path: '/reviews', label: '이용후기', icon: <Star size={20} /> },
   ];
 
@@ -129,7 +130,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     <Link 
                         key={item.path} 
                         to={item.path} 
-                        className={`text-sm font-bold transition hover:text-brand-600 ${location.pathname === item.path ? 'text-brand-600' : 'text-gray-600'}`}
+                        className={`text-sm font-bold transition hover:text-brand-600 ${location.pathname.startsWith(item.path) ? 'text-brand-600' : 'text-gray-600'}`}
                     >
                         {item.label}
                     </Link>
@@ -224,7 +225,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 pb-safe shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="max-w-3xl mx-auto flex justify-around">
           {navItems.slice(0, 5).map((item) => {
-             const isActive = location.pathname === item.path;
+             const isActive = location.pathname.startsWith(item.path) && (item.path !== '/' || location.pathname === '/');
              return (
               <Link 
                 key={item.path} 
