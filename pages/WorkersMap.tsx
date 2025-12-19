@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { db } from '../services/firebase';
 import { collection, getDocs } from 'firebase/firestore';
@@ -24,135 +25,83 @@ const WorkersMap: React.FC<WorkersMapProps> = ({ isEmbedded = false }) => {
         const workerData: WorkerProfile[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data() as WorkerProfile;
-          // Only show approved workers
-          if (data.isApproved) {
-            workerData.push(data);
-          }
+          if (data.isApproved) workerData.push(data);
         });
         setWorkers(workerData);
       } catch (error) {
-        console.error("Error fetching workers", error);
+        console.error(error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchWorkers();
   }, []);
 
   const maskPhoneNumber = (phone: string) => {
       if (!phone) return '';
-      // Assuming format 010-0000-0000 or similar
       if (phone.includes('-')) {
           const parts = phone.split('-');
-          if (parts.length === 3) {
-              return `${parts[0]}-${parts[1]}-****`;
-          }
+          return parts.length === 3 ? `${parts[0]}-${parts[1]}-****` : '****';
       }
-      // If no hyphens or weird format, just mask last 4 chars
       return phone.length > 4 ? phone.substring(0, phone.length - 4) + '****' : '****';
   };
 
   useEffect(() => {
     const newMarkers = workers.map(worker => {
-        // Create simple HTML content for the InfoWindow
         const maskedPhone = maskPhoneNumber(worker.phone);
-        
         const content = `
-            <div style="padding:12px; min-width:220px; font-family:sans-serif; border-radius:8px;">
-                <div style="font-weight:bold; margin-bottom:4px; font-size:16px; color:#166534;">${worker.displayName} 반장님</div>
-                <div style="font-size:12px; color:#555; margin-bottom:8px;">${worker.address}</div>
-                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:#444;">
-                    <span>경력 ${worker.experienceYears}년</span>
-                    <span>활동반경 ${worker.maxDistance || 10}km</span>
+            <div style="padding:12px; min-width:200px; font-family:sans-serif;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <div style="width:32px; height:32px; border-radius:50%; overflow:hidden; background:#eee;">
+                        <img src="${worker.photoUrl || 'https://via.placeholder.com/32'}" style="width:100%; height:100%; object-cover:fit;" />
+                    </div>
+                    <div style="font-weight:bold; font-size:14px; color:#166534;">${worker.displayName} 반장님</div>
                 </div>
-                <div style="font-size:13px; color:#16a34a; font-weight:bold; margin-bottom:6px;">${maskedPhone}</div>
-                ${worker.portfolioUrls && worker.portfolioUrls.length > 0 ? `<div style="font-size:11px; color:#0369a1; background:#e0f2fe; display:inline-block; padding:2px 6px; border-radius:4px;">📸 작업사진 있음</div>` : ''}
+                <div style="font-size:11px; color:#666; margin-bottom:4px;">${worker.address}</div>
+                <div style="font-size:12px; color:#16a34a; font-weight:bold;">${maskedPhone}</div>
             </div>
         `;
-
-        return {
-            lat: worker.coordinates.lat,
-            lng: worker.coordinates.lng,
-            title: worker.displayName,
-            content: content
-        };
+        return { lat: worker.coordinates.lat, lng: worker.coordinates.lng, title: worker.displayName, content };
     });
     setMarkers(newMarkers);
   }, [workers]);
 
-  // Height adjustment: Mobile 350px, Desktop 500px for embedded mode
   return (
     <div className={`flex flex-col ${isEmbedded ? 'h-[350px] md:h-[500px]' : 'pb-10 h-[calc(100vh-100px)]'}`}>
       {!isEmbedded && (
-          <div className="mb-4 flex justify-between items-end">
+          <div className="mb-4 flex justify-between items-end px-2">
             <div>
                 <h1 className="text-2xl font-bold text-gray-800">우리동네 반장 찾기</h1>
-                <p className="text-gray-500 text-sm">검증된 벌초 전문가를 지도에서 찾아보세요.</p>
+                <p className="text-gray-500 text-sm">성주군 전문가들을 지도에서 확인하세요.</p>
             </div>
-            <Link to="/profile" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg flex items-center gap-1 transition">
-                 <Settings size={14}/> 내 위치 관리
-             </Link>
+            <Link to="/profile" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg flex items-center gap-1 transition"><Settings size={14}/> 프로필 설정</Link>
           </div>
       )}
 
       <div className={`flex-1 bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden relative flex flex-col ${isEmbedded ? 'shadow-lg' : ''}`}>
           {loading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                  <span className="text-gray-500">데이터를 불러오는 중...</span>
-              </div>
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-50"><span className="text-gray-500">불러오는 중...</span></div>
           ) : (
             <>
                  <KakaoMap markers={markers} readOnly={true} />
-                 {/* Only show list if NOT embedded, or keep it small */}
                  {!isEmbedded && (
                      <div className="p-4 bg-gray-50 border-t border-gray-200 overflow-y-auto max-h-[300px]">
-                        <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
-                            <CheckCircle size={16} className="text-green-600"/>
-                            활동 중인 반장님 ({workers.length}명)
-                        </h3>
-                        {workers.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">현재 활동 중인 반장님이 없습니다.</p>}
+                        <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2 px-1"><CheckCircle size={16} className="text-green-600"/> 활동 중인 반장님 ({workers.length}명)</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {workers.map((worker, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
-                                    <div className="flex items-start gap-3">
-                                        <div className="bg-green-100 p-2 rounded-full text-green-700 mt-1">
-                                            <User size={20} />
+                                <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 border border-brand-50 shadow-sm">
+                                            {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <User size={24} className="w-full h-full p-2 text-gray-300" />}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start">
-                                                <div className="font-bold text-gray-800 text-lg truncate">{worker.displayName}</div>
-                                                <div className="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                                    반경 {worker.maxDistance || 10}km
-                                                </div>
-                                            </div>
-                                            <div className="text-xs text-gray-500 mb-1 truncate">{worker.address}</div>
-                                            <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                                                <span className="flex items-center gap-1"><Award size={12} className="text-orange-400"/> 경력 {worker.experienceYears}년</span>
-                                                <span className="w-[1px] h-3 bg-gray-300"></span>
-                                                <span>장비 {worker.equipmentCount || 1}대</span>
-                                            </div>
+                                            <div className="font-bold text-gray-800 text-base truncate">{worker.displayName}</div>
+                                            <div className="text-[10px] text-gray-500 truncate">{worker.address}</div>
                                         </div>
                                     </div>
-                                    
-                                    {worker.portfolioUrls && worker.portfolioUrls.length > 0 && (
-                                        <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
-                                            {worker.portfolioUrls.slice(0, 3).map((url, i) => (
-                                                <img key={i} src={url} alt="work" className="w-16 h-16 rounded object-cover flex-shrink-0 border border-gray-100" />
-                                            ))}
-                                            {worker.portfolioUrls.length > 3 && (
-                                                <div className="w-16 h-16 rounded bg-gray-100 flex items-center justify-center text-xs text-gray-500 flex-shrink-0">
-                                                    +{worker.portfolioUrls.length - 3}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    
-                                    <div className="mt-auto pt-2 border-t border-gray-50 flex justify-between items-center">
-                                        <div className="text-sm font-bold text-green-700 flex items-center gap-1">
-                                            <Phone size={14} /> {maskPhoneNumber(worker.phone)}
-                                        </div>
-                                        {/* Removed Detail button for privacy/simplicity in this view */}
+                                    <div className="flex items-center justify-between text-xs border-t border-gray-50 pt-2">
+                                        <span className="text-brand-700 font-bold">{maskPhoneNumber(worker.phone)}</span>
+                                        <span className="text-gray-400">경력 {worker.experienceYears}년</span>
                                     </div>
                                 </div>
                             ))}
