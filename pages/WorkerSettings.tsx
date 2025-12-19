@@ -61,13 +61,15 @@ const WorkerSettings: React.FC = () => {
                     equipmentCount: data.equipmentCount || 1,
                     portfolioUrls: data.portfolioUrls || [],
                     isApproved: data.isApproved || false,
-                    photoUrl: data.photoUrl || ''
+                    // Firestore에 photoUrl이 있으면 사용, 없으면 Auth 프로필 사진 사용
+                    photoUrl: data.photoUrl || user.photoURL || ''
                 });
             } else {
                 setHasApplied(false);
                 setProfile(prev => ({ 
                     ...prev, 
                     displayName: user.displayName,
+                    photoUrl: user.photoURL || '',
                     coordinates: prev.coordinates || { lat: 35.919069, lng: 128.283038 }
                 }));
             }
@@ -85,27 +87,31 @@ const WorkerSettings: React.FC = () => {
       setProfileLoading(true);
 
       try {
-          const fileRef = ref(storage, `profiles/${user.uid}/avatar_${Date.now()}`);
+          // 파일명에 타임스탬프를 붙여 캐시 문제를 방지합니다.
+          const fileRef = ref(storage, `profiles/${user.uid}/avatar_${Date.now()}.jpg`);
           await uploadBytes(fileRef, file);
           const url = await getDownloadURL(fileRef);
           
+          // 1. 상태 업데이트
           setProfile(prev => ({ ...prev, photoUrl: url }));
           
-          // If already a worker or has applied, update the doc
+          // 2. Auth 프로필 업데이트
+          if (auth.currentUser) {
+              await updateProfile(auth.currentUser, { photoURL: url });
+          }
+          
+          // 3. Firestore 업데이트 (지원했거나 이미 반장인 경우)
           if (hasApplied || user.role === UserRole.WORKER) {
               await updateDoc(doc(db, 'worker_profiles', user.uid), { photoUrl: url });
           }
-          
-          // Also update Auth profile
-          if (auth.currentUser) {
-              await updateProfile(auth.currentUser, { photoURL: url });
-              await refreshProfile();
-          }
+
+          // 4. 전역 Auth 상태 갱신
+          await refreshProfile();
           
           alert("프로필 사진이 업데이트되었습니다.");
       } catch (e) {
           console.error(e);
-          alert("업로드 중 오류가 발생했습니다.");
+          alert("업로드 중 오류가 발생했습니다. 권한 설정을 확인해주세요.");
       } finally {
           setProfileLoading(false);
       }
@@ -139,7 +145,7 @@ const WorkerSettings: React.FC = () => {
 
   const handleConvertToWorker = async () => {
       if (!user) return;
-      if (!window.confirm("반장님으로 등록하시겠습니까?\n등록하신 정보는 관리자 검토 후 승인됩니다.")) return;
+      if (!window.confirm("반장님으로 지원하시겠습니까?\n등록하신 정보는 관리자 검토 후 승인됩니다.")) return;
 
       setConverting(true);
       try {
@@ -258,7 +264,7 @@ const WorkerSettings: React.FC = () => {
           {/* Profile Photo Section */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 w-full md:w-64 flex flex-col items-center">
               <div className="relative group">
-                  <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-brand-50 bg-gray-100 mb-4 shadow-inner flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-brand-50 bg-gray-100 mb-4 shadow-inner flex items-center justify-center relative">
                       {profile.photoUrl ? (
                           <img src={profile.photoUrl} alt="Profile" className="w-full h-full object-cover" />
                       ) : (
