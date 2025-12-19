@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, storage } from '../services/firebase';
@@ -7,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import KakaoMap from '../components/KakaoMap';
-import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Camera, ArrowRight, UserCheck, Wrench, User, Edit2, Clock, X } from 'lucide-react';
+import { Loader2, Save, Upload, Image as ImageIcon, MapPin, Camera, ArrowRight, UserCheck, Wrench, User, Edit2, Clock, X, CheckCircle2 } from 'lucide-react';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../services/firebase';
 
@@ -61,7 +60,7 @@ const WorkerSettings: React.FC = () => {
                     equipmentCount: data.equipmentCount || 1,
                     portfolioUrls: data.portfolioUrls || [],
                     isApproved: data.isApproved || false,
-                    // Firestore에 photoUrl이 있으면 사용, 없으면 Auth 프로필 사진 사용
+                    isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
                     photoUrl: data.photoUrl || user.photoURL || ''
                 });
             } else {
@@ -87,25 +86,20 @@ const WorkerSettings: React.FC = () => {
       setProfileLoading(true);
 
       try {
-          // 파일명에 타임스탬프를 붙여 캐시 문제를 방지합니다.
           const fileRef = ref(storage, `profiles/${user.uid}/avatar_${Date.now()}.jpg`);
           await uploadBytes(fileRef, file);
           const url = await getDownloadURL(fileRef);
           
-          // 1. 상태 업데이트
           setProfile(prev => ({ ...prev, photoUrl: url }));
           
-          // 2. Auth 프로필 업데이트
           if (auth.currentUser) {
               await updateProfile(auth.currentUser, { photoURL: url });
           }
           
-          // 3. Firestore 업데이트 (지원했거나 이미 반장인 경우)
           if (hasApplied || user.role === UserRole.WORKER) {
               await updateDoc(doc(db, 'worker_profiles', user.uid), { photoUrl: url });
           }
 
-          // 4. 전역 Auth 상태 갱신
           await refreshProfile();
           
           alert("프로필 사진이 업데이트되었습니다.");
@@ -345,6 +339,28 @@ const WorkerSettings: React.FC = () => {
             <h2 className="font-bold text-lg mb-6 flex items-center gap-2 pb-4 border-b">
                 <Wrench size={20} className="text-brand-600"/> 반장님 활동 설정
             </h2>
+
+            {/* Availability Toggle */}
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 flex items-center justify-between shadow-inner">
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${profile.isAvailable ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
+                        {profile.isAvailable ? <CheckCircle2 size={24}/> : <Clock size={24}/>}
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-800">활동 가능 상태</h4>
+                        <p className="text-xs text-gray-500">
+                            {profile.isAvailable ? '현재 예약 및 상담이 가능한 상태입니다.' : '현재 다른 작업 중이거나 상담이 어렵습니다.'}
+                        </p>
+                    </div>
+                </div>
+                <button 
+                    type="button"
+                    onClick={() => setProfile(prev => ({ ...prev, isAvailable: !prev.isAvailable }))}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${profile.isAvailable ? 'bg-brand-600' : 'bg-gray-300'}`}
+                >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${profile.isAvailable ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
 
             {user?.role === UserRole.WORKER ? (
                 <div className="bg-green-50 text-green-700 px-4 py-2 rounded-lg mb-6 border border-green-200 flex items-center gap-2">

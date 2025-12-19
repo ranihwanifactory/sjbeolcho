@@ -6,6 +6,8 @@ export interface MapMarkerData {
   lng: number;
   title?: string;
   content?: string; // HTML content for InfoWindow
+  imageUrl?: string; // Marker image (e.g., profile photo)
+  isAvailable?: boolean; // Availability status
   onClick?: () => void;
 }
 
@@ -38,10 +40,9 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
   const [address, setAddress] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Ref to hold the circle instance so we can update it without re-rendering the map
   const circleRef = useRef<any>(null);
+  const overlaysRef = useRef<any[]>([]);
   
-  // Default: Seongju County Office
   const DEFAULT_LAT = 35.919069; 
   const DEFAULT_LNG = 128.283038;
 
@@ -52,62 +53,136 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         window.kakao.maps.load(() => {
             if (!mapContainer.current) return;
             
-            // Safety check: Ensure constructors exist
-            if (!window.kakao.maps.LatLng || !window.kakao.maps.Map) {
-                console.error("Kakao Maps SDK loaded but constructors are missing.");
-                return;
-            }
-
-            // Clear previous map instance HTML to prevent duplicates
             mapContainer.current.innerHTML = '';
+            // Clear existing overlays
+            overlaysRef.current.forEach(ov => ov.setMap(null));
+            overlaysRef.current = [];
 
             const centerLat = initialLat || DEFAULT_LAT;
             const centerLng = initialLng || DEFAULT_LNG;
             
             const options = {
                 center: new window.kakao.maps.LatLng(centerLat, centerLng),
-                level: markers.length > 0 ? 9 : (circleRadius > 5000 ? 9 : 7), // Adjust zoom based on radius if single marker
+                level: markers.length > 0 ? 9 : (circleRadius > 5000 ? 9 : 7),
                 mapTypeId: window.kakao.maps.MapTypeId.HYBRID
             };
             const createdMap = new window.kakao.maps.Map(mapContainer.current, options);
             setMap(createdMap);
 
-            // Mode 1: Multi-marker mode (Read Only usually)
             if (markers.length > 0) {
                 const bounds = new window.kakao.maps.LatLngBounds();
-                const instances: any[] = [];
 
                 markers.forEach(m => {
                     const pos = new window.kakao.maps.LatLng(m.lat, m.lng);
-                    const marker = new window.kakao.maps.Marker({
-                        position: pos,
-                        map: createdMap,
-                        title: m.title
-                    });
                     bounds.extend(pos);
-                    instances.push(marker);
 
-                    if (m.content || m.onClick) {
-                        window.kakao.maps.event.addListener(marker, 'click', () => {
+                    if (m.imageUrl) {
+                        // Create circular photo marker using CustomOverlay
+                        const content = document.createElement('div');
+                        content.className = 'custom-photo-marker';
+                        
+                        const isAvailable = m.isAvailable !== false; // Default to true
+
+                        content.style.cssText = `
+                            position: relative;
+                            width: 50px;
+                            height: 50px;
+                            border: 3px solid ${isAvailable ? 'white' : '#9ca3af'};
+                            border-radius: 50%;
+                            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                            cursor: pointer;
+                            background-color: #f3f4f6;
+                            background-image: url('${m.imageUrl}');
+                            background-size: cover;
+                            background-position: center;
+                            transform: translate(-50%, -100%);
+                            margin-top: -10px;
+                            filter: ${isAvailable ? 'none' : 'grayscale(100%) opacity(0.8)'};
+                            transition: all 0.3s;
+                        `;
+                        
+                        // Add a status badge if not available
+                        if (!isAvailable) {
+                            const badge = document.createElement('div');
+                            badge.innerText = '작업중';
+                            badge.style.cssText = `
+                                position: absolute;
+                                top: -10px;
+                                left: 50%;
+                                transform: translateX(-50%);
+                                background: #4b5563;
+                                color: white;
+                                font-size: 9px;
+                                font-weight: bold;
+                                padding: 2px 6px;
+                                border-radius: 4px;
+                                white-space: nowrap;
+                                border: 1px solid white;
+                            `;
+                            content.appendChild(badge);
+                        }
+
+                        // Add a small pointer triangle at the bottom
+                        const arrow = document.createElement('div');
+                        arrow.style.cssText = `
+                            position: absolute;
+                            bottom: -10px;
+                            left: 50%;
+                            transform: translateX(-50%);
+                            width: 0;
+                            height: 0;
+                            border-left: 8px solid transparent;
+                            border-right: 8px solid transparent;
+                            border-top: 10px solid ${isAvailable ? 'white' : '#9ca3af'};
+                        `;
+                        content.appendChild(arrow);
+
+                        const customOverlay = new window.kakao.maps.CustomOverlay({
+                            position: pos,
+                            content: content,
+                            yAnchor: 1
+                        });
+                        customOverlay.setMap(createdMap);
+                        overlaysRef.current.push(customOverlay);
+
+                        // Event listener for CustomOverlay
+                        content.onclick = () => {
                             if (m.onClick) m.onClick();
-                            
                             if (m.content) {
                                 const infowindow = new window.kakao.maps.InfoWindow({
                                     content: m.content,
                                     removable: true
                                 });
-                                infowindow.open(createdMap, marker);
+                                infowindow.open(createdMap);
+                                infowindow.setPosition(pos);
                             }
+                        };
+                    } else {
+                        // Standard marker
+                        const marker = new window.kakao.maps.Marker({
+                            position: pos,
+                            map: createdMap,
+                            title: m.title
                         });
+                        if (m.content || m.onClick) {
+                            window.kakao.maps.event.addListener(marker, 'click', () => {
+                                if (m.onClick) m.onClick();
+                                if (m.content) {
+                                    const infowindow = new window.kakao.maps.InfoWindow({
+                                        content: m.content,
+                                        removable: true
+                                    });
+                                    infowindow.open(createdMap, marker);
+                                }
+                            });
+                        }
                     }
                 });
                 
                 if (markers.length > 1) {
                     createdMap.setBounds(bounds);
                 }
-            } 
-            // Mode 2: Single location select / view mode
-            else {
+            } else {
                 const markerPosition = new window.kakao.maps.LatLng(centerLat, centerLng);
                 const createdMarker = new window.kakao.maps.Marker({
                     position: markerPosition
@@ -115,7 +190,6 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
                 createdMarker.setMap(createdMap);
                 setSingleMarker(createdMarker);
 
-                // Initial Circle Draw
                 if (circleRadius > 0) {
                     const circle = new window.kakao.maps.Circle({
                         center : markerPosition,
@@ -131,39 +205,19 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
                     circleRef.current = circle;
                 }
 
-                // Initial Reverse Geocode if not read-only and callback exists
-                if (!readOnly && onLocationSelect) {
-                    const geocoder = new window.kakao.maps.services.Geocoder();
-                    geocoder.coord2Address(centerLng, centerLat, (result: any, status: any) => {
-                         if (status === window.kakao.maps.services.Status.OK) {
-                            const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
-                            setAddress(addr);
-                            // Only call callback if we are initializing, but be careful of infinite loops in parent
-                            // It's safer to just set local state, but parent needs it. 
-                            // We call it here to ensure parent state (e.g. address string) is synced with default marker.
-                            onLocationSelect(centerLat, centerLng, addr);
-                        }
-                    });
-                }
-
                 if (!readOnly) {
-                    // Click event to move marker
                     window.kakao.maps.event.addListener(createdMap, 'click', (mouseEvent: any) => {
                         const latlng = mouseEvent.latLng;
                         createdMarker.setPosition(latlng);
-                        
-                        // Move circle if exists
-                        if (circleRef.current) {
-                            circleRef.current.setPosition(latlng);
-                        }
+                        if (circleRef.current) circleRef.current.setPosition(latlng);
 
                         const geocoder = new window.kakao.maps.services.Geocoder();
                         geocoder.coord2Address(latlng.getLng(), latlng.getLat(), (result: any, status: any) => {
-                        if (status === window.kakao.maps.services.Status.OK) {
-                            const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
-                            setAddress(addr);
-                            if(onLocationSelect) onLocationSelect(latlng.getLat(), latlng.getLng(), addr);
-                        }
+                            if (status === window.kakao.maps.services.Status.OK) {
+                                const addr = result[0].address ? result[0].address.address_name : '주소 정보 없음';
+                                setAddress(addr);
+                                if(onLocationSelect) onLocationSelect(latlng.getLat(), latlng.getLng(), addr);
+                            }
                         });
                     });
                 }
@@ -174,7 +228,6 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
     if (window.kakao && window.kakao.maps) {
         initMap();
     } else {
-        // Retry every 100ms for up to 5 seconds
         const interval = setInterval(() => {
             if (window.kakao && window.kakao.maps) {
                 clearInterval(interval);
@@ -183,20 +236,15 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         }, 100);
         return () => clearInterval(interval);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLat, initialLng, readOnly, JSON.stringify(markers)]); 
 
-  // Separate effect to handle circle radius updates without reloading the map
   useEffect(() => {
       if (!map || !singleMarker) return;
-
-      if (circleRadius > 0 && window.kakao?.maps?.Circle) {
+      if (circleRadius > 0) {
           if (circleRef.current) {
-              // Update existing circle
               circleRef.current.setRadius(circleRadius);
               circleRef.current.setMap(map);
           } else {
-              // Create new circle if it didn't exist (e.g. radius was 0)
               const circle = new window.kakao.maps.Circle({
                   center : singleMarker.getPosition(),
                   radius: circleRadius,
@@ -210,11 +258,8 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
               circle.setMap(map);
               circleRef.current = circle;
           }
-      } else {
-          // Hide circle if radius is 0
-          if (circleRef.current) {
-              circleRef.current.setMap(null);
-          }
+      } else if (circleRef.current) {
+          circleRef.current.setMap(null);
       }
   }, [circleRadius, map, singleMarker]);
 
@@ -226,14 +271,12 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         const place = data[0];
         const lat = place.y;
         const lng = place.x;
-        
         const moveLatLon = new window.kakao.maps.LatLng(lat, lng);
         map.setCenter(moveLatLon);
         if (singleMarker) {
             singleMarker.setPosition(moveLatLon);
             if (circleRef.current) circleRef.current.setPosition(moveLatLon);
         }
-        
         setAddress(place.address_name || place.place_name);
         if(onLocationSelect) onLocationSelect(parseFloat(lat), parseFloat(lng), place.address_name || place.place_name);
       } else {
@@ -248,14 +291,12 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
         const locPosition = new window.kakao.maps.LatLng(lat, lng);
-        
         if (map) {
           map.setCenter(locPosition);
           if (singleMarker) {
               singleMarker.setPosition(locPosition);
               if (circleRef.current) circleRef.current.setPosition(locPosition);
           }
-          
           if (!readOnly && onLocationSelect) {
               const geocoder = new window.kakao.maps.services.Geocoder();
               geocoder.coord2Address(lng, lat, (result: any, status: any) => {
@@ -285,34 +326,20 @@ const KakaoMap: React.FC<KakaoMapProps> = ({
               className="flex-1 px-4 py-2 text-sm rounded-full shadow-md border-0 focus:ring-2 focus:ring-brand-500"
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
-            <button 
-              onClick={handleSearch}
-              className="bg-brand-600 text-white p-2 rounded-full shadow-md hover:bg-brand-700 transition"
-            >
+            <button onClick={handleSearch} className="bg-brand-600 text-white p-2 rounded-full shadow-md hover:bg-brand-700 transition">
               <Search size={20} />
             </button>
           </div>
       )}
-
       <div ref={mapContainer} className="w-full h-full bg-gray-200" />
-
       {!readOnly && (
-          <button 
-            onClick={handleCurrentLocation}
-            className="absolute bottom-4 right-4 bg-white text-gray-700 p-2 rounded-full shadow-lg z-10 hover:bg-gray-100"
-            title="현위치"
-          >
+          <button onClick={handleCurrentLocation} className="absolute bottom-4 right-4 bg-white text-gray-700 p-2 rounded-full shadow-lg z-10 hover:bg-gray-100" title="현위치">
             <Crosshair size={24} />
           </button>
       )}
-
-      {/* Address Overlay - Show only in select mode */}
       {(address && !readOnly) && (
         <div className="absolute bottom-4 left-4 right-14 bg-white/90 backdrop-blur p-2 rounded-lg shadow-lg z-10 text-xs sm:text-sm">
-          <div className="flex items-center gap-1 text-brand-800 font-bold">
-            <MapPin size={14} />
-            선택된 위치
-          </div>
+          <div className="flex items-center gap-1 text-brand-800 font-bold"><MapPin size={14} />선택된 위치</div>
           <p className="truncate">{address}</p>
         </div>
       )}

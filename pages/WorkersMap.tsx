@@ -1,10 +1,9 @@
-
 import React, { useEffect, useState } from 'react';
 import { db } from '../services/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { WorkerProfile } from '../types';
 import KakaoMap, { MapMarkerData } from '../components/KakaoMap';
-import { Phone, User, Award, CheckCircle, MapPin, Settings } from 'lucide-react';
+import { Phone, User, Award, CheckCircle, MapPin, Settings, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
@@ -49,19 +48,40 @@ const WorkersMap: React.FC<WorkersMapProps> = ({ isEmbedded = false }) => {
   useEffect(() => {
     const newMarkers = workers.map(worker => {
         const maskedPhone = maskPhoneNumber(worker.phone);
-        const content = `
-            <div style="padding:12px; min-width:200px; font-family:sans-serif;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <div style="width:32px; height:32px; border-radius:50%; overflow:hidden; background:#eee;">
-                        <img src="${worker.photoUrl || 'https://via.placeholder.com/32'}" style="width:100%; height:100%; object-cover:fit;" />
+        const isAvailable = worker.isAvailable !== false;
+        
+        const infoContent = `
+            <div style="padding:15px; min-width:220px; font-family:sans-serif;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                    <div style="width:40px; height:40px; border-radius:50%; overflow:hidden; background:#eee; border: 1px solid ${isAvailable ? '#ddd' : '#9ca3af'}; filter: ${isAvailable ? 'none' : 'grayscale(100%)'};">
+                        <img src="${worker.photoUrl || 'https://via.placeholder.com/40'}" style="width:100%; height:100%; object-fit:cover;" />
                     </div>
-                    <div style="font-weight:bold; font-size:14px; color:#166534;">${worker.displayName} 반장님</div>
+                    <div>
+                        <div style="font-weight:bold; font-size:16px; color:${isAvailable ? '#166534' : '#4b5563'};">${worker.displayName}</div>
+                        <div style="font-size:11px; color:${isAvailable ? '#15803d' : '#6b7280'}; font-weight:600;">
+                            ${isAvailable ? '● 작업 가능' : '○ 상담/작업 중'}
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size:11px; color:#666; margin-bottom:4px;">${worker.address}</div>
-                <div style="font-size:12px; color:#16a34a; font-weight:bold;">${maskedPhone}</div>
+                <div style="font-size:12px; color:#4b5563; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
+                    📍 ${worker.address}
+                </div>
+                <div style="font-size:14px; color:${isAvailable ? '#16a34a' : '#9ca3af'}; font-weight:bold;">
+                    📞 ${maskedPhone}
+                </div>
+                <div style="margin-top:10px; font-size:11px; color:#9ca3af; text-align:right;">
+                    경력 ${worker.experienceYears}년 | 반경 ${worker.maxDistance}km
+                </div>
             </div>
         `;
-        return { lat: worker.coordinates.lat, lng: worker.coordinates.lng, title: worker.displayName, content };
+        return { 
+            lat: worker.coordinates.lat, 
+            lng: worker.coordinates.lng, 
+            title: worker.displayName, 
+            content: infoContent,
+            imageUrl: worker.photoUrl || 'https://via.placeholder.com/50',
+            isAvailable: isAvailable
+        };
     });
     setMarkers(newMarkers);
   }, [workers]);
@@ -89,18 +109,31 @@ const WorkersMap: React.FC<WorkersMapProps> = ({ isEmbedded = false }) => {
                         <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2 px-1"><CheckCircle size={16} className="text-green-600"/> 활동 중인 반장님 ({workers.length}명)</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {workers.map((worker, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-3">
+                                <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-3 relative overflow-hidden">
+                                    {!worker.isAvailable && (
+                                        <div className="absolute top-0 left-0 w-1 bg-gray-400 h-full"></div>
+                                    )}
                                     <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 border border-brand-50 shadow-sm">
+                                        <div className={`w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 border border-brand-50 shadow-sm ${!worker.isAvailable ? 'grayscale opacity-70' : ''}`}>
                                             {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <User size={24} className="w-full h-full p-2 text-gray-300" />}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="font-bold text-gray-800 text-base truncate">{worker.displayName}</div>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="font-bold text-gray-800 text-base truncate">{worker.displayName}</div>
+                                                {worker.isAvailable === false && (
+                                                    <span className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap">작업중</span>
+                                                )}
+                                            </div>
                                             <div className="text-[10px] text-gray-500 truncate">{worker.address}</div>
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-between text-xs border-t border-gray-50 pt-2">
-                                        <span className="text-brand-700 font-bold">{maskPhoneNumber(worker.phone)}</span>
+                                        <div className="flex items-center gap-1">
+                                            <div className={`w-2 h-2 rounded-full ${worker.isAvailable !== false ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                                            <span className={`font-bold ${worker.isAvailable !== false ? 'text-green-700' : 'text-gray-400'}`}>
+                                                {worker.isAvailable !== false ? '작업 가능' : '상담 중'}
+                                            </span>
+                                        </div>
                                         <span className="text-gray-400">경력 {worker.experienceYears}년</span>
                                     </div>
                                 </div>
