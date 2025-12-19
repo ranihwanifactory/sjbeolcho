@@ -1,8 +1,7 @@
-
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon } from 'lucide-react';
@@ -45,9 +44,13 @@ const Admin: React.FC = () => {
         setWorkers(data);
     });
 
-    const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    // orderBy('createdAt') removes docs without that field. 
+    // Using simple query to ensure all users are listed.
+    const qUsers = query(collection(db, 'users'));
     const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
+        // Client-side sort to prevent missing data in Firestore query
+        data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setAllUsers(data);
     });
 
@@ -77,11 +80,16 @@ const Admin: React.FC = () => {
   const handleApproveWorker = async (workerId: string) => {
       if (window.confirm("이 반장님을 승인하시겠습니까?")) {
           try {
-              await updateDoc(doc(db, 'worker_profiles', workerId), { isApproved: true });
-              await updateDoc(doc(db, 'users', workerId), { role: UserRole.WORKER });
-              alert("승인 완료");
+              // 1. Update worker profile status
+              await setDoc(doc(db, 'worker_profiles', workerId), { isApproved: true }, { merge: true });
+              
+              // 2. Update user role (Using setDoc with merge: true for robustness)
+              await setDoc(doc(db, 'users', workerId), { role: UserRole.WORKER }, { merge: true });
+              
+              alert("승인 완료되었습니다. 이제 해당 회원은 '반장' 권한을 갖습니다.");
           } catch (error) {
-              console.error(error);
+              console.error("Approve failed:", error);
+              alert("승인 처리 중 오류가 발생했습니다.");
           }
       }
   };
@@ -89,11 +97,16 @@ const Admin: React.FC = () => {
   const handleRevokeWorker = async (workerId: string) => {
       if (window.confirm("승인을 취소하시겠습니까?")) {
           try {
-              await updateDoc(doc(db, 'worker_profiles', workerId), { isApproved: false });
-              await updateDoc(doc(db, 'users', workerId), { role: UserRole.CUSTOMER });
-              alert("취소 완료");
+              // 1. Update worker profile status
+              await setDoc(doc(db, 'worker_profiles', workerId), { isApproved: false }, { merge: true });
+              
+              // 2. Revert user role to CUSTOMER
+              await setDoc(doc(db, 'users', workerId), { role: UserRole.CUSTOMER }, { merge: true });
+              
+              alert("취소 완료되었습니다.");
           } catch (error) {
-              console.error(error);
+              console.error("Revoke failed:", error);
+              alert("취소 처리 중 오류가 발생했습니다.");
           }
       }
   };
@@ -102,9 +115,10 @@ const Admin: React.FC = () => {
       if (uid === user?.uid) return;
       if(window.confirm(`권한을 '${newRole}'(으)로 변경하시겠습니까?`)) {
           try {
-              await updateDoc(doc(db, 'users', uid), { role: newRole });
+              await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
           } catch(error) {
               console.error(error);
+              alert("권한 변경 실패");
           }
       }
   }
