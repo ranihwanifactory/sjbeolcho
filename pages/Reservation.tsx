@@ -55,7 +55,7 @@ const Reservation: React.FC = () => {
         imageUrl = await getDownloadURL(fileRef);
       }
 
-      await addDoc(collection(db, 'reservations'), {
+      const docRef = await addDoc(collection(db, 'reservations'), {
         userId: user.uid,
         userName: formData.name,
         userPhone: formData.phone,
@@ -68,8 +68,18 @@ const Reservation: React.FC = () => {
         createdAt: serverTimestamp(),
       });
 
-      alert("예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.");
-      navigate('/');
+      // Navigate to success page with reservation details
+      navigate('/reserve/success', { 
+        state: { 
+          reservation: {
+            id: docRef.id,
+            userName: formData.name,
+            locationName: formData.address,
+            requestDate: formData.date
+          } 
+        } 
+      });
+
     } catch (error) {
       console.error(error);
       alert("접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");

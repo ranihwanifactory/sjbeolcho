@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Reservation from './pages/Reservation';
+import ReservationSuccess from './pages/ReservationSuccess';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
 import Reviews from './pages/Reviews';
@@ -41,6 +42,14 @@ const AppRoutes = () => {
                     element={
                         <PrivateRoute>
                             <Reservation />
+                        </PrivateRoute>
+                    } 
+                />
+                <Route 
+                    path="/reserve/success" 
+                    element={
+                        <PrivateRoute>
+                            <ReservationSuccess />
                         </PrivateRoute>
                     } 
                 />
