@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +7,7 @@ import { db, storage } from '../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ReservationStatus } from '../types';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, X, ImageIcon } from 'lucide-react';
 
 const Reservation: React.FC = () => {
   const { user } = useAuth();
@@ -23,7 +24,8 @@ const Reservation: React.FC = () => {
     address: '',
   });
   
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
 
   if (!user) {
     navigate('/login');
@@ -32,6 +34,26 @@ const Reservation: React.FC = () => {
 
   const handleLocationSelect = (lat: number, lng: number, address: string) => {
     setFormData(prev => ({ ...prev, lat, lng, address }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      const totalFiles = [...files, ...selectedFiles].slice(0, 5); // Limit to 5 files
+      
+      setFiles(totalFiles);
+
+      // Create previews
+      const newPreviews = totalFiles.map(file => URL.createObjectURL(file));
+      setPreviews(newPreviews);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const updatedFiles = files.filter((_, i) => i !== index);
+    const updatedPreviews = previews.filter((_, i) => i !== index);
+    setFiles(updatedFiles);
+    setPreviews(updatedPreviews);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,11 +70,18 @@ const Reservation: React.FC = () => {
     setLoading(true);
 
     try {
-      let imageUrl = '';
-      if (file) {
-        const fileRef = ref(storage, `reservations/${user.uid}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        imageUrl = await getDownloadURL(fileRef);
+      const imageUrls: string[] = [];
+      
+      // Upload all selected files
+      if (files.length > 0) {
+        await Promise.all(
+          files.map(async (file) => {
+            const fileRef = ref(storage, `reservations/${user.uid}/${Date.now()}_${file.name}`);
+            const uploadResult = await uploadBytes(fileRef, file);
+            const url = await getDownloadURL(uploadResult.ref);
+            imageUrls.push(url);
+          })
+        );
       }
 
       const docRef = await addDoc(collection(db, 'reservations'), {
@@ -63,12 +92,11 @@ const Reservation: React.FC = () => {
         coordinates: { lat: formData.lat, lng: formData.lng },
         requestDate: formData.date,
         description: formData.desc,
-        imageUrls: imageUrl ? [imageUrl] : [],
+        imageUrls: imageUrls,
         status: ReservationStatus.PENDING,
         createdAt: serverTimestamp(),
       });
 
-      // Navigate to success page with reservation details
       navigate('/reserve/success', { 
         state: { 
           reservation: {
@@ -158,13 +186,37 @@ const Reservation: React.FC = () => {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">참고 사진 (선택)</label>
-                    <div className="flex items-center gap-2">
-                        <label className="flex-1 cursor-pointer bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center hover:bg-gray-100 transition">
-                            <Upload className="text-gray-400 mb-1" size={24} />
-                            <span className="text-xs text-gray-500">{file ? file.name : "사진 업로드 (클릭)"}</span>
-                            <input type="file" className="hidden" accept="image/*" onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}/>
-                        </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">현장 참고 사진 (최대 5장)</label>
+                    
+                    {/* Selected Images Preview Grid */}
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-4">
+                        {previews.map((preview, index) => (
+                            <div key={index} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                                <img src={preview} alt={`Preview ${index}`} className="w-full h-full object-cover" />
+                                <button 
+                                    type="button" 
+                                    onClick={() => removeFile(index)}
+                                    className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-red-500 transition"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        ))}
+                        
+                        {/* Add Button Placeholder if < 5 */}
+                        {files.length < 5 && (
+                            <label className="aspect-square cursor-pointer bg-gray-50 border border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:bg-gray-100 transition">
+                                <Upload className="text-gray-400 mb-1" size={20} />
+                                <span className="text-[10px] text-gray-500">{files.length}/5</span>
+                                <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*" 
+                                    multiple 
+                                    onChange={handleFileChange}
+                                />
+                            </label>
+                        )}
                     </div>
                 </div>
                  <div>
@@ -185,7 +237,7 @@ const Reservation: React.FC = () => {
             className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center text-lg disabled:opacity-70"
         >
             {loading ? <Loader2 className="animate-spin mr-2"/> : null}
-            {loading ? '접수 중...' : '예약 신청하기'}
+            {loading ? '사진 업로드 및 접수 중...' : '예약 신청하기'}
         </button>
       </form>
     </div>
