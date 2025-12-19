@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon, Loader2, Edit3, Save } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon, Loader2, Edit3, Save, Filter } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
 
 interface UserData {
@@ -22,6 +22,7 @@ const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'reservations' | 'workers' | 'users'>('reservations');
   
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string>('전체');
   const [selectedMapLocation, setSelectedMapLocation] = useState<{lat: number, lng: number, name: string} | null>(null);
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
@@ -213,6 +214,16 @@ const Admin: React.FC = () => {
     [ReservationStatus.CANCELLED]: 'bg-gray-100 text-gray-800',
   };
 
+  // Filter Logic
+  const filteredReservations = reservations.filter(res => 
+      filterStatus === '전체' || res.status === filterStatus
+  );
+
+  const getCountByStatus = (status: string) => {
+      if (status === '전체') return reservations.length;
+      return reservations.filter(res => res.status === status).length;
+  };
+
   const pendingWorkers = workers.filter(w => !w.isApproved);
   const activeWorkers = workers.filter(w => w.isApproved);
 
@@ -227,27 +238,54 @@ const Admin: React.FC = () => {
       </div>
       
       {activeTab === 'reservations' && (
-        <div className="space-y-4">
-            {reservations.map((res) => (
-            <div key={res.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex justify-between items-start mb-4">
-                    <div>
-                        <h3 className="font-bold text-lg">{res.userName}</h3>
-                        <div className="flex items-center gap-1 text-gray-500 text-sm mt-1"><Phone size={14} /> {res.userPhone}</div>
+        <div className="space-y-6">
+            {/* Filter Bar */}
+            <div className="flex flex-wrap gap-2 items-center bg-white p-3 rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+                <div className="flex items-center gap-2 text-gray-500 text-xs font-bold mr-2 ml-1">
+                    <Filter size={14} /> 필터:
+                </div>
+                {['전체', ...Object.values(ReservationStatus)].map((status) => (
+                    <button 
+                        key={status} 
+                        onClick={() => setFilterStatus(status)} 
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${filterStatus === status ? 'bg-brand-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {status}
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${filterStatus === status ? 'bg-white text-brand-700' : 'bg-gray-300 text-gray-700'}`}>
+                            {getCountByStatus(status)}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
+            {filteredReservations.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400">
+                    등록된 {filterStatus === '전체' ? '' : `'${filterStatus}' 상태의 `}예약 내역이 없습니다.
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {filteredReservations.map((res) => (
+                    <div key={res.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 className="font-bold text-lg">{res.userName}</h3>
+                                <div className="flex items-center gap-1 text-gray-500 text-sm mt-1"><Phone size={14} /> {res.userPhone}</div>
+                            </div>
+                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColors[res.status] || 'bg-gray-100'}`}>{res.status}</span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mb-4">
+                            <div className="flex items-start gap-2"><Calendar size={16} className="mt-0.5 text-gray-400" /><span>작업 희망일: {res.requestDate}</span></div>
+                            <div className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 text-gray-400" /><div className="flex-1">위치: {res.locationName} <button onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)} className="ml-2 text-brand-600 underline text-xs font-bold">지도보기</button></div></div>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+                            {Object.values(ReservationStatus).map((status) => (
+                                <button key={status} onClick={() => updateStatus(res.id, status as ReservationStatus)} className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition ${res.status === status ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{status} 변경</button>
+                            ))}
+                        </div>
                     </div>
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColors[res.status] || 'bg-gray-100'}`}>{res.status}</span>
-                </div>
-                <div className="grid grid-cols-1 gap-3 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mb-4">
-                    <div className="flex items-start gap-2"><Calendar size={16} className="mt-0.5 text-gray-400" /><span>작업 희망일: {res.requestDate}</span></div>
-                    <div className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 text-gray-400" /><div className="flex-1">위치: {res.locationName} <button onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)} className="ml-2 text-brand-600 underline text-xs font-bold">지도보기</button></div></div>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 items-center">
-                    {Object.values(ReservationStatus).map((status) => (
-                        <button key={status} onClick={() => updateStatus(res.id, status as ReservationStatus)} className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition ${res.status === status ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{status} 변경</button>
                     ))}
                 </div>
-            </div>
-            ))}
+            )}
         </div>
       )}
 
