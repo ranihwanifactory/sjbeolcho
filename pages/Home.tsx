@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, MapPin, Mail, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star } from 'lucide-react';
+import { Phone, MapPin, Mail, Calendar, MessageCircle, ArrowRight, ShieldCheck, Camera, PenTool, UserCheck, Wrench, Users, Star, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import WorkersMap from './WorkersMap';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
@@ -10,6 +11,7 @@ import { Review } from '../types';
 const Home: React.FC = () => {
   const { user } = useAuth();
   const [recentReviews, setRecentReviews] = useState<Review[]>([]);
+  const [reviewError, setReviewError] = useState(false);
 
   useEffect(() => {
     const fetchReviews = async () => {
@@ -18,8 +20,12 @@ const Home: React.FC = () => {
             const snapshot = await getDocs(q);
             const reviewsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
             setRecentReviews(reviewsData);
-        } catch (error) {
+            setReviewError(false);
+        } catch (error: any) {
             console.error("Error fetching reviews", error);
+            if (error.code === 'permission-denied') {
+                setReviewError(true);
+            }
         }
     };
     fetchReviews();
@@ -100,7 +106,12 @@ const Home: React.FC = () => {
             </Link>
         </div>
         
-        {recentReviews.length > 0 ? (
+        {reviewError ? (
+            <div className="bg-white p-8 rounded-2xl border border-dashed border-red-200 text-center flex flex-col items-center">
+                <AlertCircle size={32} className="text-red-400 mb-2"/>
+                <p className="text-gray-500 text-sm">리뷰를 불러올 권한이 없습니다.<br/>(Firestore 보안 규칙 설정을 확인해주세요)</p>
+            </div>
+        ) : recentReviews.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {recentReviews.map((review) => (
                     <div key={review.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full hover:shadow-md transition">
@@ -135,7 +146,7 @@ const Home: React.FC = () => {
         )}
       </section>
 
-      {/* Recruitment Banner (Condensed for Mobile) */}
+      {/* Recruitment Banner */}
       <div className="bg-gradient-to-r from-green-900 to-green-800 rounded-2xl p-5 md:p-8 flex flex-col md:flex-row items-center justify-between text-white shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
           <div className="flex items-center gap-4 relative z-10 mb-4 md:mb-0 w-full md:w-auto">
@@ -162,11 +173,8 @@ const Home: React.FC = () => {
                 <h3 className="text-xl md:text-3xl font-bold text-gray-900 mb-2 md:mb-4">간편한 이용 절차</h3>
                 <p className="text-xs md:text-base text-gray-600">복잡한 절차 없이 앱 하나로 해결하세요.</p>
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-0 relative">
-                {/* Connector Line (Desktop) */}
                 <div className="hidden md:block absolute top-8 left-[10%] right-[10%] h-0.5 bg-brand-200 -z-10"></div>
-
                 {[
                     { icon: <MapPin />, title: "위치 선택", desc: "지도에서 묘소 지정" },
                     { icon: <Calendar />, title: "예약 접수", desc: "날짜/내용 입력" },
@@ -182,45 +190,12 @@ const Home: React.FC = () => {
                     </div>
                 ))}
             </div>
-
             <div className="mt-8 md:mt-12 text-center">
                 <Link to="/reserve" className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-brand-700 hover:bg-brand-800 text-white font-bold py-3 px-8 rounded-xl md:rounded-full shadow-lg transition text-sm md:text-base">
                     지금 바로 예약하기 <ArrowRight size={16} />
                 </Link>
             </div>
           </div>
-      </section>
-
-      {/* Info & Company Preview */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col justify-between">
-            <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <MessageCircle className="text-brand-600" size={20}/> 1:1 맞춤 상담
-                </h3>
-                <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                    견적이 궁금하시거나 특별한 요청사항이 있으신가요? 채팅으로 문의주세요.
-                </p>
-            </div>
-            <Link to="/chat" className="self-start bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
-                문의하기 <ArrowRight size={14} />
-            </Link>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col justify-between">
-            <div>
-                 <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <Phone className="text-brand-600" size={20}/> 고객센터
-                </h3>
-                <div className="space-y-2">
-                    <a href="tel:010-7545-0038" className="block text-xl font-bold text-gray-800">010-7545-0038</a>
-                    <p className="text-xs text-gray-500">
-                        경북 성주군 성주읍 성주순환로2길 69<br/>
-                        hwanace@naver.com
-                    </p>
-                </div>
-            </div>
-        </div>
       </section>
     </div>
   );

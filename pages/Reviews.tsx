@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, storage } from '../services/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Review, UserRole } from '../types';
-import { Star, Upload, X, PenTool, Loader2, MoreHorizontal, Trash2, Edit2 } from 'lucide-react';
+import { Star, Upload, X, PenTool, Loader2, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Reviews: React.FC = () => {
@@ -12,7 +13,8 @@ const Reviews: React.FC = () => {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,14 +24,29 @@ const Reviews: React.FC = () => {
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     const q = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-      } as Review));
-      setReviews(data);
-    });
+    
+    // onSnapshot error handling
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        } as Review));
+        setReviews(data);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Firestore reviews error:", err);
+        setLoading(false);
+        if (err.code === 'permission-denied') {
+          setError("후기를 불러올 권한이 없습니다. Firebase 보안 규칙을 확인해주세요.");
+        } else {
+          setError("데이터를 불러오는 중 오류가 발생했습니다.");
+        }
+      }
+    );
     return () => unsubscribe();
   }, []);
 
@@ -86,7 +103,6 @@ const Reviews: React.FC = () => {
     try {
         let imageUrl = existingPhotoUrl || '';
         
-        // Upload new file if selected
         if (file) {
             const fileRef = ref(storage, `reviews/${user.uid}/${Date.now()}_${file.name}`);
             await uploadBytes(fileRef, file);
@@ -94,16 +110,13 @@ const Reviews: React.FC = () => {
         }
 
         if (editingId) {
-            // Update existing review
             await updateDoc(doc(db, 'reviews', editingId), {
                 rating,
                 text,
                 photoUrl: imageUrl,
-                // We typically don't update createdAt, but could add updatedAt if needed
             });
             alert("후기가 수정되었습니다.");
         } else {
-            // Create new review
             await addDoc(collection(db, 'reviews'), {
                 userId: user.uid,
                 userName: user.displayName || '익명',
@@ -137,7 +150,19 @@ const Reviews: React.FC = () => {
           </button>
       </div>
 
-      {reviews.length === 0 ? (
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 flex items-center gap-3">
+          <AlertCircle className="flex-shrink-0" size={20} />
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
+
+      {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <Loader2 className="animate-spin mb-2" size={32} />
+              <p>후기를 불러오는 중...</p>
+          </div>
+      ) : reviews.length === 0 ? (
           <div className="text-center py-20 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
               <p>아직 등록된 후기가 없습니다.</p>
               <p className="text-sm mt-1">첫 번째 후기의 주인공이 되어보세요!</p>
@@ -202,50 +227,24 @@ const Reviews: React.FC = () => {
       {/* Write/Edit Modal */}
       {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-0">
-              <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl relative animate-slide-up sm:animate-none">
-                  <button 
-                    onClick={resetForm}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                  >
-                      <X size={24} />
-                  </button>
-                  
-                  <h2 className="text-xl font-bold mb-4 text-gray-800">
-                      {editingId ? '후기 수정' : '후기 작성'}
-                  </h2>
-                  
+              <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl relative">
+                  <button onClick={resetForm} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24} /></button>
+                  <h2 className="text-xl font-bold mb-4 text-gray-800">{editingId ? '후기 수정' : '후기 작성'}</h2>
                   <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
                           <label className="block text-sm font-bold text-gray-700 mb-2">만족도</label>
                           <div className="flex gap-2">
                               {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => setRating(star)}
-                                    className="focus:outline-none transition transform active:scale-110"
-                                  >
-                                      <Star 
-                                        size={32} 
-                                        className={star <= rating ? "text-yellow-400" : "text-gray-300"} 
-                                        fill={star <= rating ? "currentColor" : "none"}
-                                      />
+                                  <button key={star} type="button" onClick={() => setRating(star)} className="focus:outline-none transition transform active:scale-110">
+                                      <Star size={32} className={star <= rating ? "text-yellow-400" : "text-gray-300"} fill={star <= rating ? "currentColor" : "none"} />
                                   </button>
                               ))}
                           </div>
                       </div>
-
                       <div>
                           <label className="block text-sm font-bold text-gray-700 mb-2">내용</label>
-                          <textarea 
-                              value={text}
-                              onChange={(e) => setText(e.target.value)}
-                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none h-32 resize-none"
-                              placeholder="서비스 이용 후기를 자유롭게 남겨주세요."
-                              required
-                          />
+                          <textarea value={text} onChange={(e) => setText(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none h-32 resize-none" placeholder="서비스 이용 후기를 자유롭게 남겨주세요." required />
                       </div>
-
                       <div>
                           <label className="block text-sm font-bold text-gray-700 mb-2">사진 첨부 (선택)</label>
                           <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition relative overflow-hidden">
@@ -254,7 +253,7 @@ const Reviews: React.FC = () => {
                                         <img src={existingPhotoUrl} alt="Existing" className="w-full h-full object-cover opacity-50" />
                                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/10">
                                             <Upload className="text-white drop-shadow-md mb-1" size={24}/>
-                                            <p className="text-xs text-white font-bold drop-shadow-md">사진 변경하려면 클릭</p>
+                                            <p className="text-xs text-white font-bold drop-shadow-md">사진 변경</p>
                                         </div>
                                     </div>
                                 ) : (
@@ -266,14 +265,9 @@ const Reviews: React.FC = () => {
                                 <input type="file" className="hidden" accept="image/*" onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)} />
                           </label>
                       </div>
-
-                      <button 
-                        type="submit" 
-                        disabled={loading}
-                        className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition flex items-center justify-center"
-                      >
+                      <button type="submit" disabled={loading} className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition flex items-center justify-center">
                           {loading ? <Loader2 className="animate-spin mr-2"/> : null}
-                          {loading ? (editingId ? '수정 완료' : '등록 중...') : (editingId ? '수정하기' : '후기 등록하기')}
+                          {loading ? '처리 중...' : (editingId ? '수정하기' : '후기 등록하기')}
                       </button>
                   </form>
               </div>

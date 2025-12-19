@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon, Loader2 } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon, Loader2, Edit3, Save } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
 
 interface UserData {
@@ -25,6 +26,11 @@ const Admin: React.FC = () => {
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // User Edit Modal State
+  const [editUserModal, setEditUserModal] = useState<UserData | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
 
   useEffect(() => {
     if (!user || user.role !== UserRole.ADMIN) {
@@ -64,7 +70,7 @@ const Admin: React.FC = () => {
             await updateDoc(doc(db, 'reservations', id), { status });
         } catch (e) {
             console.error(e);
-            alert("상태 변경 권한이 없습니다. Firebase 규칙을 확인하세요.");
+            alert("상태 변경 권한이 없습니다.");
         }
     }
   };
@@ -74,22 +80,13 @@ const Admin: React.FC = () => {
           setActionLoading(workerId);
           try {
               const batch = writeBatch(db);
-              
-              // 1. 프로필 승인 상태 업데이트
               batch.set(doc(db, 'worker_profiles', workerId), { isApproved: true }, { merge: true });
-              
-              // 2. 유저 권한을 WORKER로 변경
               batch.set(doc(db, 'users', workerId), { role: UserRole.WORKER }, { merge: true });
-              
               await batch.commit();
               alert("반장 승인 및 권한 변경이 완료되었습니다.");
           } catch (error: any) {
               console.error("Approve failed:", error);
-              if (error.code === 'permission-denied') {
-                  alert("권한이 거부되었습니다. Firebase 콘솔의 Firestore Rules에서 관리자 권한 설정을 확인해주세요.");
-              } else {
-                  alert("승인 처리 중 오류가 발생했습니다.");
-              }
+              alert("승인 처리 중 오류가 발생했습니다.");
           } finally {
               setActionLoading(null);
           }
@@ -119,23 +116,91 @@ const Admin: React.FC = () => {
           alert("본인의 권한은 변경할 수 없습니다.");
           return;
       }
-      if(window.confirm(`사용자의 권한을 '${newRole}'(으)로 직접 변경하시겠습니까?`)) {
+      setActionLoading(uid);
+      try {
+          await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
+          alert("권한이 변경되었습니다.");
+      } catch(error: any) {
+          console.error(error);
+          alert("권한 변경 실패");
+      } finally {
+          setActionLoading(null);
+      }
+  }
+
+  // --- Member Edit Logic ---
+  const openEditModal = (targetUser: UserData) => {
+      setEditUserModal(targetUser);
+      setEditUserName(targetUser.name || '');
+      setEditUserEmail(targetUser.email || '');
+  };
+
+  const closeEditModal = () => {
+      setEditUserModal(null);
+  };
+
+  const saveUserEdit = async () => {
+      if (!editUserModal) return;
+      if (!editUserName.trim()) {
+          alert("이름을 입력해주세요.");
+          return;
+      }
+
+      setActionLoading(editUserModal.uid);
+      try {
+          const batch = writeBatch(db);
+          
+          // 1. Update user info
+          batch.set(doc(db, 'users', editUserModal.uid), {
+              name: editUserName,
+              email: editUserEmail
+          }, { merge: true });
+
+          // 2. If user is a worker, also update the worker profile
+          if (editUserModal.role === UserRole.WORKER) {
+              batch.set(doc(db, 'worker_profiles', editUserModal.uid), {
+                  displayName: editUserName
+              }, { merge: true });
+          }
+
+          await batch.commit();
+          alert("회원 정보가 수정되었습니다.");
+          closeEditModal();
+      } catch (error) {
+          console.error(error);
+          alert("수정 중 오류가 발생했습니다.");
+      } finally {
+          setActionLoading(null);
+      }
+  };
+
+  const handleDeleteUser = async (uid: string, name: string) => {
+      if (uid === user?.uid) {
+          alert("본인 계정은 삭제할 수 없습니다.");
+          return;
+      }
+
+      if (window.confirm(`정말로 '${name}' 회원을 시스템에서 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 반장 프로필도 함께 삭제됩니다.`)) {
           setActionLoading(uid);
           try {
-              await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
-              alert("권한이 성공적으로 변경되었습니다.");
-          } catch(error: any) {
-              console.log("Permission Error:", error);
-              if (error.code === 'permission-denied') {
-                  alert("수정 권한이 없습니다.\nFirebase Rules에서 관리자 계정(acehwan69@gmail.com)의 쓰기 권한이 허용되어 있는지 확인해주세요.");
-              } else {
-                  alert("권한 변경 실패: " + error.message);
-              }
+              const batch = writeBatch(db);
+              
+              // Delete user record
+              batch.delete(doc(db, 'users', uid));
+              
+              // Delete worker profile if exists
+              batch.delete(doc(db, 'worker_profiles', uid));
+              
+              await batch.commit();
+              alert("회원이 삭제되었습니다.");
+          } catch (error) {
+              console.error(error);
+              alert("삭제 중 오류가 발생했습니다.");
           } finally {
               setActionLoading(null);
           }
       }
-  }
+  };
 
   const openMapModal = (lat: number, lng: number, name: string) => {
       if (lat && lng) setSelectedMapLocation({ lat, lng, name });
@@ -244,7 +309,13 @@ const Admin: React.FC = () => {
              <div className="overflow-x-auto">
                  <table className="w-full text-left text-sm text-gray-600">
                      <thead className="bg-gray-50 text-gray-700 font-bold border-b">
-                         <tr><th className="p-4">이름</th><th className="p-4">이메일</th><th className="p-4">구분(Role)</th><th className="p-4">가입일</th></tr>
+                         <tr>
+                             <th className="p-4">이름</th>
+                             <th className="p-4">이메일</th>
+                             <th className="p-4">구분(Role)</th>
+                             <th className="p-4">가입일</th>
+                             <th className="p-4">관리</th>
+                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-100">
                          {allUsers.map(u => (
@@ -267,6 +338,14 @@ const Admin: React.FC = () => {
                                      )}
                                  </td>
                                  <td className="p-4 text-xs">{u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : '-'}</td>
+                                 <td className="p-4 flex items-center gap-2">
+                                     <button onClick={() => openEditModal(u)} className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition" title="정보 수정">
+                                         <Edit3 size={18} />
+                                     </button>
+                                     <button onClick={() => handleDeleteUser(u.uid, u.name)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="회원 삭제">
+                                         <Trash2 size={18} />
+                                     </button>
+                                 </td>
                              </tr>
                          ))}
                      </tbody>
@@ -275,11 +354,63 @@ const Admin: React.FC = () => {
           </div>
       )}
 
+      {/* Map Preview Modal */}
       {selectedMapLocation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
               <div className="bg-white w-full max-w-lg rounded-xl overflow-hidden shadow-2xl relative">
                   <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold flex items-center gap-2">위치 확인</h3><button onClick={() => setSelectedMapLocation(null)}><X size={24} /></button></div>
                   <div className="p-4"><KakaoMap readOnly={true} initialLat={selectedMapLocation.lat} initialLng={selectedMapLocation.lng} /><p className="mt-3 text-sm text-gray-600 bg-gray-100 p-2 rounded">{selectedMapLocation.name}</p></div>
+              </div>
+          </div>
+      )}
+
+      {/* User Edit Modal */}
+      {editUserModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative">
+                  <div className="p-5 border-b flex justify-between items-center bg-gray-50">
+                      <h3 className="font-bold text-lg flex items-center gap-2 text-gray-800">
+                          <UserIcon className="text-brand-600" size={20}/>
+                          회원 정보 수정
+                      </h3>
+                      <button onClick={closeEditModal} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                      <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1">성함</label>
+                          <input 
+                            type="text" 
+                            value={editUserName} 
+                            onChange={(e) => setEditUserName(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
+                            placeholder="성함 입력"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1">이메일</label>
+                          <input 
+                            type="email" 
+                            value={editUserEmail} 
+                            onChange={(e) => setEditUserEmail(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
+                            placeholder="이메일 입력"
+                          />
+                      </div>
+                      <p className="text-xs text-gray-400">
+                          * 이름 수정 시 반장 프로필의 활동명도 자동으로 변경됩니다.
+                      </p>
+                  </div>
+                  <div className="p-5 bg-gray-50 flex gap-3">
+                      <button onClick={closeEditModal} className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-200 rounded-xl transition">취소</button>
+                      <button 
+                        onClick={saveUserEdit} 
+                        disabled={actionLoading === editUserModal.uid}
+                        className="flex-1 py-3 bg-brand-600 text-white font-bold hover:bg-brand-700 rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+                      >
+                          {actionLoading === editUserModal.uid ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
+                          저장하기
+                      </button>
+                  </div>
               </div>
           </div>
       )}
