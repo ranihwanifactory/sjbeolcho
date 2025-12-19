@@ -83,3 +83,23 @@ export interface Review {
   photoUrl?: string;
   createdAt: Timestamp;
 }
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  createdAt: Timestamp;
+  viewCount: number;
+  imageUrls?: string[]; // Added for attachments
+}
+
+export interface NoticeComment {
+  id: string;
+  noticeId: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: Timestamp;
+}

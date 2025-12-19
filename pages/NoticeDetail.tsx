@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
 import { doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { Notice, NoticeComment, UserRole } from '../types';
-import { ArrowLeft, Trash2, User, Send, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Send, Calendar, Clock, Edit2 } from 'lucide-react';
 
 const NoticeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +66,10 @@ const NoticeDetail: React.FC = () => {
     }
   };
 
+  const handleEditNotice = () => {
+      if(id) navigate(`/notices/${id}/edit`);
+  }
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id || !user || !newComment.trim()) return;
@@ -123,17 +127,33 @@ const NoticeDetail: React.FC = () => {
               <span className="flex items-center gap-1"><Calendar size={14}/> {notice.createdAt ? new Date(notice.createdAt.seconds * 1000).toLocaleDateString() : ''}</span>
             </div>
             {user?.role === UserRole.ADMIN && (
-              <button 
-                onClick={handleDeleteNotice}
-                className="text-red-500 flex items-center gap-1 hover:text-red-700 font-bold"
-              >
-                <Trash2 size={14} /> 삭제
-              </button>
+              <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handleEditNotice}
+                    className="text-gray-500 flex items-center gap-1 hover:text-brand-600 font-bold"
+                  >
+                    <Edit2 size={14} /> 수정
+                  </button>
+                  <button 
+                    onClick={handleDeleteNotice}
+                    className="text-red-500 flex items-center gap-1 hover:text-red-700 font-bold"
+                  >
+                    <Trash2 size={14} /> 삭제
+                  </button>
+              </div>
             )}
           </div>
         </div>
-        <div className="p-6 min-h-[200px] text-gray-800 whitespace-pre-wrap leading-relaxed">
-          {notice.content}
+        
+        <div className="p-6">
+            {notice.imageUrls && notice.imageUrls.map((url, index) => (
+                <div key={index} className="mb-6 rounded-lg overflow-hidden border border-gray-100">
+                    <img src={url} alt={`attachment-${index}`} className="w-full h-auto object-contain max-h-[500px] bg-gray-50" />
+                </div>
+            ))}
+            <div className="text-gray-800 whitespace-pre-wrap leading-relaxed min-h-[100px]">
+                {notice.content}
+            </div>
         </div>
       </div>
 

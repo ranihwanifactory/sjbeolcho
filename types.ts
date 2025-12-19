@@ -92,6 +92,7 @@ export interface Notice {
   authorName: string;
   createdAt: Timestamp;
   viewCount: number;
+  imageUrls?: string[]; // Added for attachments
 }
 
 export interface NoticeComment {

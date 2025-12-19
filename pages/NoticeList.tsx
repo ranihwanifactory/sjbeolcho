@@ -4,7 +4,7 @@ import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Notice, UserRole } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Megaphone, PenTool, ChevronRight } from 'lucide-react';
+import { Megaphone, PenTool, ChevronRight, Image as ImageIcon } from 'lucide-react';
 
 const NoticeList: React.FC = () => {
   const { user } = useAuth();
@@ -60,20 +60,36 @@ const NoticeList: React.FC = () => {
                 onClick={() => navigate(`/notices/${notice.id}`)}
                 className="p-5 hover:bg-gray-50 cursor-pointer transition flex items-center justify-between group"
               >
-                <div className="flex-1 min-w-0 pr-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="bg-brand-100 text-brand-700 text-[10px] px-2 py-0.5 rounded-full font-bold">공지</span>
-                    <h3 className="text-base md:text-lg font-bold text-gray-800 truncate group-hover:text-brand-600 transition">
-                      {notice.title}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
-                    <span>{notice.authorName}</span>
-                    <span className="w-[1px] h-3 bg-gray-300"></span>
-                    <span>{notice.createdAt ? new Date(notice.createdAt.seconds * 1000).toLocaleDateString() : ''}</span>
-                  </div>
+                <div className="flex flex-1 items-center gap-4 overflow-hidden">
+                   {/* Text Content */}
+                   <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-brand-100 text-brand-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0">공지</span>
+                        <h3 className="text-base md:text-lg font-bold text-gray-800 truncate group-hover:text-brand-600 transition">
+                          {notice.title}
+                        </h3>
+                        {notice.imageUrls && notice.imageUrls.length > 0 && (
+                             <ImageIcon size={14} className="text-gray-400 flex-shrink-0" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-400">
+                        <span>{notice.authorName}</span>
+                        <span className="w-[1px] h-3 bg-gray-300"></span>
+                        <span>{notice.createdAt ? new Date(notice.createdAt.seconds * 1000).toLocaleDateString() : ''}</span>
+                      </div>
+                   </div>
+
+                   {/* Thumbnail Image */}
+                   {notice.imageUrls && notice.imageUrls.length > 0 && (
+                       <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 bg-gray-50">
+                           <img src={notice.imageUrls[0]} alt="thumb" className="w-full h-full object-cover" />
+                       </div>
+                   )}
                 </div>
-                <ChevronRight className="text-gray-300 group-hover:text-brand-500 transition" size={20} />
+                
+                <div className="ml-4">
+                     <ChevronRight className="text-gray-300 group-hover:text-brand-500 transition" size={20} />
+                </div>
               </div>
             ))}
           </div>

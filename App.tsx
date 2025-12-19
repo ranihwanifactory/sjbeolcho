@@ -12,6 +12,7 @@ import WorkersMap from './pages/WorkersMap';
 import NoticeList from './pages/NoticeList';
 import NoticeWrite from './pages/NoticeWrite';
 import NoticeDetail from './pages/NoticeDetail';
+import NoticeEdit from './pages/NoticeEdit';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserRole } from './types';
 
@@ -80,6 +81,14 @@ const AppRoutes = () => {
                     element={
                         <AdminRoute>
                             <NoticeWrite />
+                        </AdminRoute>
+                    } 
+                />
+                <Route 
+                    path="/notices/:id/edit" 
+                    element={
+                        <AdminRoute>
+                            <NoticeEdit />
                         </AdminRoute>
                     } 
                 />
