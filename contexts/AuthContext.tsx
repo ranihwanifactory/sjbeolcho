@@ -27,18 +27,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (firebaseUser: User) => {
-      // Check Firestore for user role
       let role = UserRole.CUSTOMER;
       
+      // Check Firestore for user role
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.role) {
+              role = data.role as UserRole;
+          }
+      }
+
+      // Special rule: Hardcoded admin email always gets ADMIN role on frontend
       if (firebaseUser.email === ADMIN_EMAIL) {
           role = UserRole.ADMIN;
-      } else {
-          // Try to fetch custom role from 'users' collection
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-              const data = userDoc.data();
-              if (data.role) role = data.role;
+          // Ensure it's reflected in DB too
+          if (!userDoc.exists() || userDoc.data().role !== UserRole.ADMIN) {
+              await setDoc(userDocRef, { role: UserRole.ADMIN }, { merge: true });
           }
       }
 
@@ -73,18 +80,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      // Create user doc if not exists
       const userDocRef = doc(db, 'users', result.user.uid);
       const userDoc = await getDoc(userDocRef);
+      
       if (!userDoc.exists()) {
         await setDoc(userDocRef, {
             email: result.user.email,
             name: result.user.displayName,
-            role: UserRole.CUSTOMER, // Default to customer for Google login
+            role: result.user.email === ADMIN_EMAIL ? UserRole.ADMIN : UserRole.CUSTOMER,
             createdAt: new Date()
         });
       }
-      await refreshProfile(); // Ensure role is loaded
+      await refreshProfile();
     } catch (error) {
       console.error("Google Login failed", error);
       throw error;
@@ -107,17 +114,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             displayName: name
         });
         
-        // Save additional user info including role
+        const finalRole = email === ADMIN_EMAIL ? UserRole.ADMIN : role;
+
         await setDoc(doc(db, 'users', userCredential.user.uid), {
             email,
             name,
-            role,
+            role: finalRole,
             createdAt: new Date()
         });
         
-        // Force refresh to get the role
         await fetchUserData(userCredential.user);
-
     } catch (error) {
         console.error("Signup failed", error);
         throw error;

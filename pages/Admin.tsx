@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Reservation, ReservationStatus, UserRole, WorkerProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon } from 'lucide-react';
+import { Phone, MapPin, Calendar, CheckSquare, MessageCircle, Map as MapIcon, X, Trash2, Users, ClipboardList, CheckCircle, AlertTriangle, User as UserIcon, Loader2 } from 'lucide-react';
 import KakaoMap from '../components/KakaoMap';
 
 interface UserData {
@@ -23,8 +23,8 @@ const Admin: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedMapLocation, setSelectedMapLocation] = useState<{lat: number, lng: number, name: string} | null>(null);
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
-  const [selectedWorkerForPortfolio, setSelectedWorkerForPortfolio] = useState<WorkerProfile | null>(null);
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== UserRole.ADMIN) {
@@ -44,12 +44,9 @@ const Admin: React.FC = () => {
         setWorkers(data);
     });
 
-    // orderBy('createdAt') removes docs without that field. 
-    // Using simple query to ensure all users are listed.
     const qUsers = query(collection(db, 'users'));
     const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserData));
-        // Client-side sort to prevent missing data in Firestore query
         data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setAllUsers(data);
     });
@@ -63,62 +60,79 @@ const Admin: React.FC = () => {
 
   const updateStatus = async (id: string, status: ReservationStatus) => {
     if (window.confirm(`상태를 '${status}'(으)로 변경하시겠습니까?`)) {
-        await updateDoc(doc(db, 'reservations', id), { status });
+        try {
+            await updateDoc(doc(db, 'reservations', id), { status });
+        } catch (e) {
+            console.error(e);
+            alert("상태 변경 권한이 없습니다. Firebase 규칙을 확인하세요.");
+        }
     }
-  };
-
-  const handleDelete = async (id: string) => {
-      if (window.confirm("정말로 이 예약 내역을 삭제하시겠습니까?")) {
-          try {
-              await deleteDoc(doc(db, 'reservations', id));
-          } catch (error) {
-              console.error(error);
-          }
-      }
   };
 
   const handleApproveWorker = async (workerId: string) => {
       if (window.confirm("이 반장님을 승인하시겠습니까?")) {
+          setActionLoading(workerId);
           try {
-              // 1. Update worker profile status
-              await setDoc(doc(db, 'worker_profiles', workerId), { isApproved: true }, { merge: true });
+              const batch = writeBatch(db);
               
-              // 2. Update user role (Using setDoc with merge: true for robustness)
-              await setDoc(doc(db, 'users', workerId), { role: UserRole.WORKER }, { merge: true });
+              // 1. 프로필 승인 상태 업데이트
+              batch.set(doc(db, 'worker_profiles', workerId), { isApproved: true }, { merge: true });
               
-              alert("승인 완료되었습니다. 이제 해당 회원은 '반장' 권한을 갖습니다.");
-          } catch (error) {
+              // 2. 유저 권한을 WORKER로 변경
+              batch.set(doc(db, 'users', workerId), { role: UserRole.WORKER }, { merge: true });
+              
+              await batch.commit();
+              alert("반장 승인 및 권한 변경이 완료되었습니다.");
+          } catch (error: any) {
               console.error("Approve failed:", error);
-              alert("승인 처리 중 오류가 발생했습니다.");
+              if (error.code === 'permission-denied') {
+                  alert("권한이 거부되었습니다. Firebase 콘솔의 Firestore Rules에서 관리자 권한 설정을 확인해주세요.");
+              } else {
+                  alert("승인 처리 중 오류가 발생했습니다.");
+              }
+          } finally {
+              setActionLoading(null);
           }
       }
   };
 
   const handleRevokeWorker = async (workerId: string) => {
-      if (window.confirm("승인을 취소하시겠습니까?")) {
+      if (window.confirm("반장 승인을 취소하고 일반 회원으로 변경하시겠습니까?")) {
+          setActionLoading(workerId);
           try {
-              // 1. Update worker profile status
-              await setDoc(doc(db, 'worker_profiles', workerId), { isApproved: false }, { merge: true });
-              
-              // 2. Revert user role to CUSTOMER
-              await setDoc(doc(db, 'users', workerId), { role: UserRole.CUSTOMER }, { merge: true });
-              
-              alert("취소 완료되었습니다.");
-          } catch (error) {
-              console.error("Revoke failed:", error);
+              const batch = writeBatch(db);
+              batch.set(doc(db, 'worker_profiles', workerId), { isApproved: false }, { merge: true });
+              batch.set(doc(db, 'users', workerId), { role: UserRole.CUSTOMER }, { merge: true });
+              await batch.commit();
+              alert("승인 취소 및 권한 변경 완료.");
+          } catch (error: any) {
+              console.error(error);
               alert("취소 처리 중 오류가 발생했습니다.");
+          } finally {
+              setActionLoading(null);
           }
       }
   };
 
   const handleChangeRole = async (uid: string, newRole: UserRole) => {
-      if (uid === user?.uid) return;
-      if(window.confirm(`권한을 '${newRole}'(으)로 변경하시겠습니까?`)) {
+      if (uid === user?.uid) {
+          alert("본인의 권한은 변경할 수 없습니다.");
+          return;
+      }
+      if(window.confirm(`사용자의 권한을 '${newRole}'(으)로 직접 변경하시겠습니까?`)) {
+          setActionLoading(uid);
           try {
               await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
-          } catch(error) {
-              console.error(error);
-              alert("권한 변경 실패");
+              alert("권한이 성공적으로 변경되었습니다.");
+          } catch(error: any) {
+              console.log("Permission Error:", error);
+              if (error.code === 'permission-denied') {
+                  alert("수정 권한이 없습니다.\nFirebase Rules에서 관리자 계정(acehwan69@gmail.com)의 쓰기 권한이 허용되어 있는지 확인해주세요.");
+              } else {
+                  alert("권한 변경 실패: " + error.message);
+              }
+          } finally {
+              setActionLoading(null);
           }
       }
   }
@@ -126,8 +140,6 @@ const Admin: React.FC = () => {
   const openMapModal = (lat: number, lng: number, name: string) => {
       if (lat && lng) setSelectedMapLocation({ lat, lng, name });
   };
-
-  const closeMapModal = () => setSelectedMapLocation(null);
 
   const statusColors = {
     [ReservationStatus.PENDING]: 'bg-yellow-100 text-yellow-800',
@@ -141,12 +153,12 @@ const Admin: React.FC = () => {
 
   return (
     <div className="pb-8 relative">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center justify-between"><span>관리자 대시보드</span></h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">관리자 대시보드</h1>
       
       <div className="flex gap-4 mb-6 border-b border-gray-200 overflow-x-auto">
-          <button onClick={() => setActiveTab('reservations')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'reservations' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><ClipboardList size={20} />예약 관리 ({reservations.length})</button>
-          <button onClick={() => setActiveTab('workers')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'workers' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><Users size={20} />반장님 관리 ({workers.length}){pendingWorkers.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">{pendingWorkers.length}</span>}</button>
-          <button onClick={() => setActiveTab('users')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'users' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><UserIcon size={20} />회원 관리 ({allUsers.length})</button>
+          <button onClick={() => setActiveTab('reservations')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'reservations' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><ClipboardList size={20} />예약 관리</button>
+          <button onClick={() => setActiveTab('workers')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'workers' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><Users size={20} />반장님 관리 {pendingWorkers.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">{pendingWorkers.length}</span>}</button>
+          <button onClick={() => setActiveTab('users')} className={`pb-3 px-2 flex items-center gap-2 font-bold transition whitespace-nowrap ${activeTab === 'users' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-400 hover:text-gray-600'}`}><UserIcon size={20} />회원 관리</button>
       </div>
       
       {activeTab === 'reservations' && (
@@ -161,15 +173,13 @@ const Admin: React.FC = () => {
                     <span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColors[res.status] || 'bg-gray-100'}`}>{res.status}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mb-4">
-                    <div className="flex items-start gap-2"><Calendar size={16} className="mt-0.5 text-gray-400" /><span><span className="font-semibold">작업 희망일:</span> {res.requestDate}</span></div>
-                    <div className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 text-gray-400" /><div className="flex-1"><span className="font-semibold">위치:</span> {res.locationName} <button onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)} className="ml-2 text-brand-600 underline text-xs font-bold hover:text-brand-800">지도보기</button></div></div>
-                    {res.description && <div className="flex items-start gap-2 col-span-1"><CheckSquare size={16} className="mt-0.5 text-gray-400" /><span><span className="font-semibold">요청사항:</span> {res.description}</span></div>}
+                    <div className="flex items-start gap-2"><Calendar size={16} className="mt-0.5 text-gray-400" /><span>작업 희망일: {res.requestDate}</span></div>
+                    <div className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 text-gray-400" /><div className="flex-1">위치: {res.locationName} <button onClick={() => openMapModal(res.coordinates.lat, res.coordinates.lng, res.locationName)} className="ml-2 text-brand-600 underline text-xs font-bold">지도보기</button></div></div>
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 items-center">
                     {Object.values(ReservationStatus).map((status) => (
-                        <button key={status} onClick={() => updateStatus(res.id, status as ReservationStatus)} className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition ${res.status === status ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{status}로 변경</button>
+                        <button key={status} onClick={() => updateStatus(res.id, status as ReservationStatus)} className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap transition ${res.status === status ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>{status} 변경</button>
                     ))}
-                    <button onClick={() => handleDelete(res.id)} className="px-3 py-1.5 rounded-full text-xs border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition flex items-center gap-1 ml-auto"><Trash2 size={12} /> 삭제</button>
                 </div>
             </div>
             ))}
@@ -180,40 +190,48 @@ const Admin: React.FC = () => {
           <div className="space-y-8">
               {pendingWorkers.length > 0 && (
                   <div>
-                      <h3 className="text-lg font-bold text-yellow-700 mb-3 flex items-center gap-2"><AlertTriangle size={20}/> 승인 대기 ({pendingWorkers.length})</h3>
+                      <h3 className="text-lg font-bold text-yellow-700 mb-3 flex items-center gap-2"><AlertTriangle size={20}/> 승인 대기</h3>
                       <div className="space-y-4">
                           {pendingWorkers.map(worker => (
-                              <div key={worker.uid} className="bg-yellow-50 p-5 rounded-xl shadow-sm border border-yellow-200 flex flex-col md:flex-row gap-4 items-center">
-                                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 bg-gray-200 border-2 border-white">
-                                      {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="w-full h-full p-3 text-gray-400" />}
+                              <div key={worker.uid} className="bg-yellow-50 p-5 rounded-xl border border-yellow-200 flex items-center gap-4">
+                                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
+                                      {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="w-full h-full p-2 text-gray-400" />}
                                   </div>
-                                  <div className="flex-1 w-full text-center md:text-left">
-                                      <h3 className="font-bold text-lg">{worker.displayName}</h3>
-                                      <p className="text-sm text-gray-600">{worker.phone} | {worker.address}</p>
+                                  <div className="flex-1">
+                                      <h3 className="font-bold">{worker.displayName}</h3>
+                                      <p className="text-xs text-gray-600">{worker.address}</p>
                                   </div>
-                                  <button onClick={() => handleApproveWorker(worker.uid)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md">승인하기</button>
+                                  <button 
+                                    onClick={() => handleApproveWorker(worker.uid)} 
+                                    disabled={actionLoading === worker.uid}
+                                    className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+                                  >
+                                      {actionLoading === worker.uid ? <Loader2 className="animate-spin" size={16}/> : '승인하기'}
+                                  </button>
                               </div>
                           ))}
                       </div>
                   </div>
               )}
               <div>
-                  <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-green-600"/> 활동 중인 반장님 ({activeWorkers.length})</h3>
+                  <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2"><CheckCircle size={20} className="text-green-600"/> 활동 중인 반장님</h3>
                   <div className="space-y-4">
                     {activeWorkers.map(worker => (
-                        <div key={worker.uid} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center">
-                            <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 bg-gray-200 border-2 border-brand-50 shadow-sm">
-                                {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="w-full h-full p-3 text-gray-400" />}
+                        <div key={worker.uid} className="bg-white p-5 rounded-xl border border-gray-200 flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
+                                {worker.photoUrl ? <img src={worker.photoUrl} className="w-full h-full object-cover" /> : <UserIcon className="w-full h-full p-2 text-gray-400" />}
                             </div>
-                            <div className="flex-1 w-full text-center md:text-left">
-                                <h3 className="font-bold text-lg">{worker.displayName}</h3>
-                                <div className="text-sm text-gray-600 flex flex-wrap justify-center md:justify-start gap-3">
-                                    <span>{worker.phone}</span>
-                                    <span>{worker.experienceYears}년 경력</span>
-                                    <span>활동반경 {worker.maxDistance}km</span>
-                                </div>
+                            <div className="flex-1">
+                                <h3 className="font-bold">{worker.displayName}</h3>
+                                <p className="text-xs text-gray-500">{worker.phone} | {worker.experienceYears}년 경력</p>
                             </div>
-                            <button onClick={() => handleRevokeWorker(worker.uid)} className="text-xs border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 rounded">승인 취소</button>
+                            <button 
+                                onClick={() => handleRevokeWorker(worker.uid)} 
+                                disabled={actionLoading === worker.uid}
+                                className="text-xs border border-red-200 text-red-600 px-3 py-2 rounded hover:bg-red-50 disabled:opacity-50"
+                            >
+                                {actionLoading === worker.uid ? <Loader2 className="animate-spin" size={14}/> : '승인 취소'}
+                            </button>
                         </div>
                     ))}
                   </div>
@@ -225,20 +243,30 @@ const Admin: React.FC = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
              <div className="overflow-x-auto">
                  <table className="w-full text-left text-sm text-gray-600">
-                     <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                     <thead className="bg-gray-50 text-gray-700 font-bold border-b">
                          <tr><th className="p-4">이름</th><th className="p-4">이메일</th><th className="p-4">구분(Role)</th><th className="p-4">가입일</th></tr>
                      </thead>
                      <tbody className="divide-y divide-gray-100">
-                         {allUsers.map(user => (
-                             <tr key={user.uid} className="hover:bg-gray-50">
-                                 <td className="p-4 font-medium text-gray-900">{user.name}</td>
-                                 <td className="p-4">{user.email}</td>
+                         {allUsers.map(u => (
+                             <tr key={u.uid} className="hover:bg-gray-50">
+                                 <td className="p-4 font-medium text-gray-900">{u.name}</td>
+                                 <td className="p-4">{u.email}</td>
                                  <td className="p-4">
-                                     <select value={user.role || UserRole.CUSTOMER} onChange={(e) => handleChangeRole(user.uid, e.target.value as UserRole)} className={`px-2 py-1 rounded text-xs font-bold border border-gray-300 ${user.role === UserRole.ADMIN ? 'bg-red-100 text-red-700' : user.role === UserRole.WORKER ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}>
-                                         <option value={UserRole.CUSTOMER}>일반</option><option value={UserRole.WORKER}>반장</option><option value={UserRole.ADMIN}>관리자</option>
-                                     </select>
+                                     {actionLoading === u.uid ? (
+                                         <Loader2 className="animate-spin text-brand-600" size={16}/>
+                                     ) : (
+                                        <select 
+                                            value={u.role || UserRole.CUSTOMER} 
+                                            onChange={(e) => handleChangeRole(u.uid, e.target.value as UserRole)} 
+                                            className={`px-2 py-1 rounded text-xs font-bold border border-gray-300 focus:outline-none ${u.role === UserRole.ADMIN ? 'bg-red-100 text-red-700' : u.role === UserRole.WORKER ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}
+                                        >
+                                            <option value={UserRole.CUSTOMER}>일반</option>
+                                            <option value={UserRole.WORKER}>반장</option>
+                                            <option value={UserRole.ADMIN}>관리자</option>
+                                        </select>
+                                     )}
                                  </td>
-                                 <td className="p-4 text-xs">{user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : '-'}</td>
+                                 <td className="p-4 text-xs">{u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : '-'}</td>
                              </tr>
                          ))}
                      </tbody>
@@ -250,7 +278,7 @@ const Admin: React.FC = () => {
       {selectedMapLocation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
               <div className="bg-white w-full max-w-lg rounded-xl overflow-hidden shadow-2xl relative">
-                  <div className="p-4 border-b flex justify-between items-center bg-gray-50"><h3 className="font-bold flex items-center gap-2"><MapPin size={18} className="text-brand-600"/>위치 확인</h3><button onClick={closeMapModal}><X size={24} /></button></div>
+                  <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold flex items-center gap-2">위치 확인</h3><button onClick={() => setSelectedMapLocation(null)}><X size={24} /></button></div>
                   <div className="p-4"><KakaoMap readOnly={true} initialLat={selectedMapLocation.lat} initialLng={selectedMapLocation.lng} /><p className="mt-3 text-sm text-gray-600 bg-gray-100 p-2 rounded">{selectedMapLocation.name}</p></div>
               </div>
           </div>
